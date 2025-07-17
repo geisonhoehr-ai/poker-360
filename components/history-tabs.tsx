@@ -1,9 +1,11 @@
 "use client"
 
+import { Label } from "@/components/ui/label"
+
 import { useState, useEffect, useMemo, useCallback } from "react"
 import { format, parseISO } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { Download } from "lucide-react"
+import { Download, Search } from "lucide-react" // Adicionado Search icon
 import type {
   Key,
   PermanenceChecklistItem,
@@ -20,11 +22,16 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"
+import { Input } from "@/components/ui/input" // Importar Input
+import { AnalyticsDashboard } from "./analytics-dashboard"
 
 // Sub-component for Attendance History
 function AttendanceHistoryContent() {
   const [allRecords, setAllRecords] = useState<AttendanceRecord[]>([])
   const [selectedDate, setSelectedDate] = useState<string>("all")
+  const [searchTerm, setSearchTerm] = useState<string>("") // Novo estado para busca
+  const [selectedStatus, setSelectedStatus] = useState<string>("all") // Novo estado para filtro de status
+  const [selectedCallType, setSelectedCallType] = useState<string>("all") // Novo estado para filtro de tipo de chamada
   const [loading, setLoading] = useState(true)
 
   const fetchRecords = useCallback(async () => {
@@ -60,12 +67,40 @@ function AttendanceHistoryContent() {
     return Array.from(dates).sort((a, b) => b.localeCompare(a))
   }, [allRecords])
 
+  const uniqueCallTypes = useMemo(() => {
+    const types = new Set(allRecords.map((record) => record.callType))
+    return Array.from(types).sort()
+  }, [allRecords])
+
+  const uniqueStatuses = useMemo(() => {
+    const statuses = new Set(allRecords.map((record) => record.status))
+    return Array.from(statuses).sort()
+  }, [allRecords])
+
   const filteredRecords = useMemo(() => {
-    if (selectedDate === "all") {
-      return allRecords
+    let records = allRecords
+
+    if (selectedDate !== "all") {
+      records = records.filter((record) => record.date === selectedDate)
     }
-    return allRecords.filter((record) => record.date === selectedDate)
-  }, [allRecords, selectedDate])
+    if (selectedStatus !== "all") {
+      records = records.filter((record) => record.status === selectedStatus)
+    }
+    if (selectedCallType !== "all") {
+      records = records.filter((record) => record.callType === selectedCallType)
+    }
+    if (searchTerm) {
+      const lowerCaseSearchTerm = searchTerm.toLowerCase()
+      records = records.filter(
+        (record) =>
+          record.militaryName.toLowerCase().includes(lowerCaseSearchTerm) ||
+          record.rank.toLowerCase().includes(lowerCaseSearchTerm) ||
+          record.status.toLowerCase().includes(lowerCaseSearchTerm) ||
+          record.callType.toLowerCase().includes(lowerCaseSearchTerm),
+      )
+    }
+    return records
+  }, [allRecords, selectedDate, selectedStatus, selectedCallType, searchTerm])
 
   const groupedRecords = useMemo(() => {
     const groups: Record<string, Record<string, AttendanceRecord[]>> = {}
@@ -126,14 +161,22 @@ function AttendanceHistoryContent() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
-        <div className="w-full sm:w-1/2 space-y-2">
-          <label
-            htmlFor="date-filter-attendance"
-            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-          >
-            Filtrar por Data
-          </label>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <div className="space-y-2">
+          <Label htmlFor="search-attendance">Buscar</Label>
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              id="search-attendance"
+              placeholder="Buscar militar, status, etc."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8"
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="date-filter-attendance">Filtrar por Data</Label>
           <Select value={selectedDate} onValueChange={setSelectedDate}>
             <SelectTrigger id="date-filter-attendance">
               <SelectValue placeholder="Todas as datas" />
@@ -148,15 +191,47 @@ function AttendanceHistoryContent() {
             </SelectContent>
           </Select>
         </div>
-        <Button onClick={handleExportCsv} disabled={filteredRecords.length === 0} className="w-full sm:w-auto">
-          <Download className="mr-2 h-4 w-4" /> Exportar CSV
-        </Button>
+        <div className="space-y-2">
+          <Label htmlFor="status-filter-attendance">Filtrar por Status</Label>
+          <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+            <SelectTrigger id="status-filter-attendance">
+              <SelectValue placeholder="Todos os status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os status</SelectItem>
+              {uniqueStatuses.map((status) => (
+                <SelectItem key={status} value={status}>
+                  {status}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="calltype-filter-attendance">Filtrar por Tipo de Chamada</Label>
+          <Select value={selectedCallType} onValueChange={setSelectedCallType}>
+            <SelectTrigger id="calltype-filter-attendance">
+              <SelectValue placeholder="Todos os tipos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os tipos</SelectItem>
+              {uniqueCallTypes.map((type) => (
+                <SelectItem key={type} value={type}>
+                  {type}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
+      <Button onClick={handleExportCsv} disabled={filteredRecords.length === 0} className="w-full sm:w-auto">
+        <Download className="mr-2 h-4 w-4" /> Exportar CSV
+      </Button>
 
       {Object.keys(groupedRecords).length === 0 ? (
-        <p className="text-muted-foreground">Nenhum registro de falta encontrado.</p>
+        <p className="text-muted-foreground">Nenhum registro de falta encontrado com os filtros aplicados.</p>
       ) : (
-        <div className="space-y-8">
+        <div className="space-y-8 mt-6">
           {Object.keys(groupedRecords)
             .sort((a, b) => b.localeCompare(a))
             .map((date) => (
@@ -201,6 +276,7 @@ function AttendanceHistoryContent() {
 function PermanenceHistoryContent() {
   const [allRecords, setAllRecords] = useState<DailyPermanenceRecord[]>([])
   const [selectedDate, setSelectedDate] = useState<string>("all")
+  const [searchTerm, setSearchTerm] = useState<string>("") // Novo estado para busca
   const [loading, setLoading] = useState(true)
 
   const fetchRecords = useCallback(async () => {
@@ -211,12 +287,10 @@ function PermanenceHistoryContent() {
       .select("*")
       .order("date", { ascending: false })
 
-    /* Se a tabela não existir ainda no Supabase, o Postgres retorna o código
-       42P01 (undefined_table). Tratamos isso para não quebrar o app. */
     if (error) {
       if (error.code === "42P01") {
         console.warn("Tabela daily_permanence_records ainda não existe no Supabase – exibindo lista vazia.")
-        setAllRecords([]) // nenhuma quebra – apenas lista vazia
+        setAllRecords([])
       } else {
         console.error("Erro ao buscar histórico de permanência:", error)
       }
@@ -226,7 +300,7 @@ function PermanenceHistoryContent() {
           id: r.id,
           militaryId: r.military_id,
           militaryName: r.military_name,
-          date: r.date, // string ISO
+          date: r.date,
           checklist: r.checklist as PermanenceChecklistItem[],
         })) as DailyPermanenceRecord[],
       )
@@ -245,11 +319,20 @@ function PermanenceHistoryContent() {
   }, [allRecords])
 
   const filteredRecords = useMemo(() => {
-    if (selectedDate === "all") {
-      return allRecords
+    let records = allRecords
+    if (selectedDate !== "all") {
+      records = records.filter((record) => record.date === selectedDate)
     }
-    return allRecords.filter((record) => record.date === selectedDate)
-  }, [allRecords, selectedDate])
+    if (searchTerm) {
+      const lowerCaseSearchTerm = searchTerm.toLowerCase()
+      records = records.filter(
+        (record) =>
+          record.militaryName.toLowerCase().includes(lowerCaseSearchTerm) ||
+          record.checklist.some((item) => item.content.toLowerCase().includes(lowerCaseSearchTerm)),
+      )
+    }
+    return records
+  }, [allRecords, selectedDate, searchTerm])
 
   const handleExportCsv = () => {
     if (filteredRecords.length === 0) {
@@ -300,7 +383,6 @@ function PermanenceHistoryContent() {
     )
   }
 
-  /* Caso a tabela não exista e allRecords esteja vazio mostramos ajuda. */
   if (allRecords.length === 0) {
     return (
       <p className="text-muted-foreground">
@@ -313,14 +395,22 @@ function PermanenceHistoryContent() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
-        <div className="w-full sm:w-1/2 space-y-2">
-          <label
-            htmlFor="date-filter-permanence"
-            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-          >
-            Filtrar por Data
-          </label>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+        <div className="space-y-2">
+          <Label htmlFor="search-permanence">Buscar</Label>
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              id="search-permanence"
+              placeholder="Buscar militar ou tarefa"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8"
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="date-filter-permanence">Filtrar por Data</Label>
           <Select value={selectedDate} onValueChange={setSelectedDate}>
             <SelectTrigger id="date-filter-permanence">
               <SelectValue placeholder="Todas as datas" />
@@ -335,15 +425,15 @@ function PermanenceHistoryContent() {
             </SelectContent>
           </Select>
         </div>
-        <Button onClick={handleExportCsv} disabled={filteredRecords.length === 0} className="w-full sm:w-auto">
-          <Download className="mr-2 h-4 w-4" /> Exportar CSV
-        </Button>
       </div>
+      <Button onClick={handleExportCsv} disabled={filteredRecords.length === 0} className="w-full sm:w-auto">
+        <Download className="mr-2 h-4 w-4" /> Exportar CSV
+      </Button>
 
       {filteredRecords.length === 0 ? (
-        <p className="text-muted-foreground">Nenhum registro de permanência salvo.</p>
+        <p className="text-muted-foreground">Nenhum registro de permanência salvo com os filtros aplicados.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto mt-6">
           <table className="w-full text-sm text-left text-muted-foreground">
             <thead className="text-xs text-foreground uppercase bg-muted">
               <tr>
@@ -386,6 +476,8 @@ function PermanenceHistoryContent() {
 function FlightHistoryContent() {
   const [allRecords, setAllRecords] = useState<FlightRecord[]>([])
   const [selectedDate, setSelectedDate] = useState<string>("all")
+  const [searchTerm, setSearchTerm] = useState<string>("") // Novo estado para busca
+  const [selectedPilot, setSelectedPilot] = useState<string>("all") // Novo estado para filtro de piloto
   const [loading, setLoading] = useState(true)
 
   const fetchRecords = useCallback(async () => {
@@ -401,7 +493,7 @@ function FlightHistoryContent() {
       setAllRecords(
         data.map((f: any) => ({
           id: f.id,
-          date: parseISO(f.date), // Converter string ISO para Date
+          date: parseISO(f.date),
           timeZulu: f.time_zulu,
           timeBrasilia: f.time_brasilia,
           pilotIds: f.pilot_ids,
@@ -421,12 +513,37 @@ function FlightHistoryContent() {
     return Array.from(dates).sort((a, b) => b.localeCompare(a))
   }, [allRecords])
 
+  const allPilotsInFlights = useMemo(() => {
+    const pilotIds = new Set<string>()
+    allRecords.forEach((record) => record.pilotIds.forEach((id) => pilotIds.add(id)))
+    return Array.from(pilotIds)
+      .map((id) => {
+        const pilot = militaryPersonnel.find((p) => p.id === id)
+        return { id, name: pilot ? `${pilot.rank} ${pilot.name}`.trim() : "Desconhecido" }
+      })
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [allRecords])
+
   const filteredRecords = useMemo(() => {
-    if (selectedDate === "all") {
-      return allRecords
+    let records = allRecords
+    if (selectedDate !== "all") {
+      records = records.filter((record) => format(record.date, "yyyy-MM-dd") === selectedDate)
     }
-    return allRecords.filter((record) => format(record.date, "yyyy-MM-dd") === selectedDate)
-  }, [allRecords, selectedDate])
+    if (selectedPilot !== "all") {
+      records = records.filter((record) => record.pilotIds.includes(selectedPilot))
+    }
+    if (searchTerm) {
+      const lowerCaseSearchTerm = searchTerm.toLowerCase()
+      records = records.filter(
+        (record) =>
+          record.description?.toLowerCase().includes(lowerCaseSearchTerm) ||
+          getPilotNames(record.pilotIds).toLowerCase().includes(lowerCaseSearchTerm) ||
+          record.timeZulu.toLowerCase().includes(lowerCaseSearchTerm) ||
+          record.timeBrasilia.toLowerCase().includes(lowerCaseSearchTerm),
+      )
+    }
+    return records
+  }, [allRecords, selectedDate, selectedPilot, searchTerm])
 
   const getPilotNames = (ids: string[]) => {
     return ids
@@ -482,14 +599,22 @@ function FlightHistoryContent() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
-        <div className="w-full sm:w-1/2 space-y-2">
-          <label
-            htmlFor="date-filter-flights"
-            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-          >
-            Filtrar por Data
-          </label>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+        <div className="space-y-2">
+          <Label htmlFor="search-flights">Buscar</Label>
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              id="search-flights"
+              placeholder="Buscar descrição, piloto, etc."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8"
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="date-filter-flights">Filtrar por Data</Label>
           <Select value={selectedDate} onValueChange={setSelectedDate}>
             <SelectTrigger id="date-filter-flights">
               <SelectValue placeholder="Todas as datas" />
@@ -504,15 +629,31 @@ function FlightHistoryContent() {
             </SelectContent>
           </Select>
         </div>
-        <Button onClick={handleExportCsv} disabled={filteredRecords.length === 0} className="w-full sm:w-auto">
-          <Download className="mr-2 h-4 w-4" /> Exportar CSV
-        </Button>
+        <div className="space-y-2">
+          <Label htmlFor="pilot-filter-flights">Filtrar por Piloto</Label>
+          <Select value={selectedPilot} onValueChange={setSelectedPilot}>
+            <SelectTrigger id="pilot-filter-flights">
+              <SelectValue placeholder="Todos os pilotos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os pilotos</SelectItem>
+              {allPilotsInFlights.map((pilot) => (
+                <SelectItem key={pilot.id} value={pilot.id}>
+                  {pilot.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
+      <Button onClick={handleExportCsv} disabled={filteredRecords.length === 0} className="w-full sm:w-auto">
+        <Download className="mr-2 h-4 w-4" /> Exportar CSV
+      </Button>
 
       {filteredRecords.length === 0 ? (
-        <p className="text-muted-foreground">Nenhum voo agendado.</p>
+        <p className="text-muted-foreground">Nenhum voo agendado com os filtros aplicados.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto mt-6">
           <Table>
             <TableHeader>
               <TableRow>
@@ -545,6 +686,8 @@ function FlightHistoryContent() {
 function EventHistoryContent() {
   const [allRecords, setAllRecords] = useState<Event[]>([])
   const [selectedDate, setSelectedDate] = useState<string>("all")
+  const [searchTerm, setSearchTerm] = useState<string>("") // Novo estado para busca
+  const [selectedCreator, setSelectedCreator] = useState<string>("all") // Novo estado para filtro de criador
   const [loading, setLoading] = useState(true)
 
   const fetchRecords = useCallback(async () => {
@@ -580,12 +723,40 @@ function EventHistoryContent() {
     return Array.from(dates).sort((a, b) => b.localeCompare(a))
   }, [allRecords])
 
+  const allCreators = useMemo(() => {
+    const creatorIds = new Set<string>()
+    allRecords.forEach((record) => {
+      if (record.createdByMilitaryId) {
+        creatorIds.add(record.createdByMilitaryId)
+      }
+    })
+    return Array.from(creatorIds)
+      .map((id) => {
+        const military = militaryPersonnel.find((m) => m.id === id)
+        return { id, name: military ? `${military.rank} ${military.name}`.trim() : "Desconhecido" }
+      })
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [allRecords])
+
   const filteredRecords = useMemo(() => {
-    if (selectedDate === "all") {
-      return allRecords
+    let records = allRecords
+    if (selectedDate !== "all") {
+      records = records.filter((record) => format(record.date, "yyyy-MM-dd") === selectedDate)
     }
-    return allRecords.filter((record) => format(record.date, "yyyy-MM-dd") === selectedDate)
-  }, [allRecords, selectedDate])
+    if (selectedCreator !== "all") {
+      records = records.filter((record) => record.createdByMilitaryId === selectedCreator)
+    }
+    if (searchTerm) {
+      const lowerCaseSearchTerm = searchTerm.toLowerCase()
+      records = records.filter(
+        (record) =>
+          record.title.toLowerCase().includes(lowerCaseSearchTerm) ||
+          record.description?.toLowerCase().includes(lowerCaseSearchTerm) ||
+          getMilitaryName(record.createdByMilitaryId).toLowerCase().includes(lowerCaseSearchTerm),
+      )
+    }
+    return records
+  }, [allRecords, selectedDate, selectedCreator, searchTerm])
 
   const getMilitaryName = (id: string | undefined) => {
     if (!id) return "N/A"
@@ -638,14 +809,22 @@ function EventHistoryContent() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
-        <div className="w-full sm:w-1/2 space-y-2">
-          <label
-            htmlFor="date-filter-events"
-            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-          >
-            Filtrar por Data
-          </label>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+        <div className="space-y-2">
+          <Label htmlFor="search-events">Buscar</Label>
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              id="search-events"
+              placeholder="Buscar título, descrição, etc."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8"
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="date-filter-events">Filtrar por Data</Label>
           <Select value={selectedDate} onValueChange={setSelectedDate}>
             <SelectTrigger id="date-filter-events">
               <SelectValue placeholder="Todas as datas" />
@@ -660,15 +839,31 @@ function EventHistoryContent() {
             </SelectContent>
           </Select>
         </div>
-        <Button onClick={handleExportCsv} disabled={filteredRecords.length === 0} className="w-full sm:w-auto">
-          <Download className="mr-2 h-4 w-4" /> Exportar CSV
-        </Button>
+        <div className="space-y-2">
+          <Label htmlFor="creator-filter-events">Filtrar por Criador</Label>
+          <Select value={selectedCreator} onValueChange={setSelectedCreator}>
+            <SelectTrigger id="creator-filter-events">
+              <SelectValue placeholder="Todos os criadores" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os criadores</SelectItem>
+              {allCreators.map((creator) => (
+                <SelectItem key={creator.id} value={creator.id}>
+                  {creator.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
+      <Button onClick={handleExportCsv} disabled={filteredRecords.length === 0} className="w-full sm:w-auto">
+        <Download className="mr-2 h-4 w-4" /> Exportar CSV
+      </Button>
 
       {filteredRecords.length === 0 ? (
-        <p className="text-muted-foreground">Nenhum evento registrado.</p>
+        <p className="text-muted-foreground">Nenhum evento registrado com os filtros aplicados.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto mt-6">
           <Table>
             <TableHeader>
               <TableRow>
@@ -702,6 +897,9 @@ function KeyManagementHistoryContent() {
   const [allMovements, setAllMovements] = useState<KeyMovement[]>([])
   const [allKeys, setAllKeys] = useState<Key[]>([])
   const [selectedDate, setSelectedDate] = useState<string>("all")
+  const [searchTerm, setSearchTerm] = useState<string>("") // Novo estado para busca
+  const [selectedKey, setSelectedKey] = useState<string>("all") // Novo estado para filtro de chave
+  const [selectedMovementType, setSelectedMovementType] = useState<string>("all") // Novo estado para filtro de tipo de movimento
   const [loading, setLoading] = useState(true)
 
   const fetchHistoryData = useCallback(async () => {
@@ -751,11 +949,27 @@ function KeyManagementHistoryContent() {
   }, [allMovements])
 
   const filteredMovements = useMemo(() => {
-    if (selectedDate === "all") {
-      return allMovements
+    let movements = allMovements
+    if (selectedDate !== "all") {
+      movements = movements.filter((movement) => format(parseISO(movement.timestamp), "yyyy-MM-dd") === selectedDate)
     }
-    return allMovements.filter((movement) => format(parseISO(movement.timestamp), "yyyy-MM-dd") === selectedDate)
-  }, [allMovements, selectedDate])
+    if (selectedKey !== "all") {
+      movements = movements.filter((movement) => movement.keyId === selectedKey)
+    }
+    if (selectedMovementType !== "all") {
+      movements = movements.filter((movement) => movement.type === selectedMovementType)
+    }
+    if (searchTerm) {
+      const lowerCaseSearchTerm = searchTerm.toLowerCase()
+      movements = movements.filter(
+        (movement) =>
+          getKeyDetails(movement.keyId).toLowerCase().includes(lowerCaseSearchTerm) ||
+          getMilitaryName(movement.militaryId).toLowerCase().includes(lowerCaseSearchTerm) ||
+          movement.type.toLowerCase().includes(lowerCaseSearchTerm),
+      )
+    }
+    return movements
+  }, [allMovements, selectedDate, selectedKey, selectedMovementType, searchTerm])
 
   const getKeyDetails = (keyId: string) => {
     const key = allKeys.find((k) => k.id === keyId)
@@ -811,14 +1025,22 @@ function KeyManagementHistoryContent() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
-        <div className="w-full sm:w-1/2 space-y-2">
-          <label
-            htmlFor="date-filter-keys"
-            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-          >
-            Filtrar por Data
-          </label>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <div className="space-y-2">
+          <Label htmlFor="search-keys">Buscar</Label>
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              id="search-keys"
+              placeholder="Buscar chave, militar, etc."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8"
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="date-filter-keys">Filtrar por Data</Label>
           <Select value={selectedDate} onValueChange={setSelectedDate}>
             <SelectTrigger id="date-filter-keys">
               <SelectValue placeholder="Todas as datas" />
@@ -833,15 +1055,44 @@ function KeyManagementHistoryContent() {
             </SelectContent>
           </Select>
         </div>
-        <Button onClick={handleExportCsv} disabled={filteredMovements.length === 0} className="w-full sm:w-auto">
-          <Download className="mr-2 h-4 w-4" /> Exportar CSV
-        </Button>
+        <div className="space-y-2">
+          <Label htmlFor="key-filter-keys">Filtrar por Chave</Label>
+          <Select value={selectedKey} onValueChange={setSelectedKey}>
+            <SelectTrigger id="key-filter-keys">
+              <SelectValue placeholder="Todas as chaves" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as chaves</SelectItem>
+              {allKeys.map((key) => (
+                <SelectItem key={key.id} value={key.id}>
+                  {getKeyDetails(key.id)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="movement-type-filter-keys">Filtrar por Tipo</Label>
+          <Select value={selectedMovementType} onValueChange={setSelectedMovementType}>
+            <SelectTrigger id="movement-type-filter-keys">
+              <SelectValue placeholder="Todos os tipos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os tipos</SelectItem>
+              <SelectItem value="retirada">Retirada</SelectItem>
+              <SelectItem value="entrega">Entrega</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
+      <Button onClick={handleExportCsv} disabled={filteredMovements.length === 0} className="w-full sm:w-auto">
+        <Download className="mr-2 h-4 w-4" /> Exportar CSV
+      </Button>
 
       {filteredMovements.length === 0 ? (
-        <p className="text-muted-foreground">Nenhum movimento de chave registrado.</p>
+        <p className="text-muted-foreground">Nenhum movimento de chave registrado com os filtros aplicados.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto mt-6">
           <Table>
             <TableHeader>
               <TableRow>
@@ -878,17 +1129,18 @@ export function HistoryTabs() {
   return (
     <Card className="w-full max-w-5xl mx-auto">
       <CardHeader>
-        <CardTitle>Histórico</CardTitle>
-        <CardDescription>Visualize e exporte os registros de todos os módulos.</CardDescription>
+        <CardTitle>Histórico e Análises</CardTitle>
+        <CardDescription>Visualize, exporte e analise os registros de todos os módulos.</CardDescription>
       </CardHeader>
       <CardContent>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-6 h-auto">
             <TabsTrigger value="attendance">Faltas</TabsTrigger>
             <TabsTrigger value="permanence">Permanência</TabsTrigger>
             <TabsTrigger value="flights">Voos</TabsTrigger>
             <TabsTrigger value="events">Avisos e Eventos</TabsTrigger>
             <TabsTrigger value="keys">Claviculário</TabsTrigger>
+            <TabsTrigger value="analytics">Análises</TabsTrigger>
           </TabsList>
           <TabsContent value="attendance" className="mt-6">
             <AttendanceHistoryContent />
@@ -904,6 +1156,9 @@ export function HistoryTabs() {
           </TabsContent>
           <TabsContent value="keys" className="mt-6">
             <KeyManagementHistoryContent />
+          </TabsContent>
+          <TabsContent value="analytics" className="mt-6">
+            <AnalyticsDashboard />
           </TabsContent>
         </Tabs>
       </CardContent>
