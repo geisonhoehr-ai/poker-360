@@ -1,0 +1,912 @@
+"use client"
+
+import { useState, useEffect, useMemo, useCallback } from "react"
+import { format, parseISO } from "date-fns"
+import { ptBR } from "date-fns/locale"
+import { Download } from "lucide-react"
+import type {
+  Key,
+  PermanenceChecklistItem,
+  AttendanceRecord,
+  DailyPermanenceRecord,
+  FlightRecord,
+  KeyMovement,
+  Event,
+} from "@/lib/types"
+import { militaryPersonnel } from "@/lib/data"
+import { supabase } from "@/lib/supabase"
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
+import { Button } from "@/components/ui/button"
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"
+
+// Sub-component for Attendance History
+function AttendanceHistoryContent() {
+  const [allRecords, setAllRecords] = useState<AttendanceRecord[]>([])
+  const [selectedDate, setSelectedDate] = useState<string>("all")
+  const [loading, setLoading] = useState(true)
+
+  const fetchRecords = useCallback(async () => {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from("military_attendance_records")
+      .select("*")
+      .order("date", { ascending: false })
+    if (error) {
+      console.error("Erro ao buscar histórico de faltas:", error)
+    } else {
+      setAllRecords(
+        data.map((r: any) => ({
+          id: r.id,
+          militaryId: r.military_id,
+          militaryName: r.military_name,
+          rank: r.rank,
+          callType: r.call_type,
+          date: r.date,
+          status: r.status,
+        })) as AttendanceRecord[],
+      )
+    }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    fetchRecords()
+  }, [fetchRecords])
+
+  const uniqueDates = useMemo(() => {
+    const dates = new Set(allRecords.map((record) => record.date))
+    return Array.from(dates).sort((a, b) => b.localeCompare(a))
+  }, [allRecords])
+
+  const filteredRecords = useMemo(() => {
+    if (selectedDate === "all") {
+      return allRecords
+    }
+    return allRecords.filter((record) => record.date === selectedDate)
+  }, [allRecords, selectedDate])
+
+  const groupedRecords = useMemo(() => {
+    const groups: Record<string, Record<string, AttendanceRecord[]>> = {}
+    filteredRecords.forEach((record) => {
+      if (!groups[record.date]) {
+        groups[record.date] = {}
+      }
+      if (!groups[record.date][record.callType]) {
+        groups[record.date][record.callType] = []
+      }
+      groups[record.date][record.callType].push(record)
+    })
+    return groups
+  }, [filteredRecords])
+
+  const handleExportCsv = () => {
+    if (filteredRecords.length === 0) {
+      alert("Não há dados para exportar.")
+      return
+    }
+
+    const headers = ["Data", "Tipo de Chamada", "Posto/Graduação", "Nome", "Status"]
+    const csvRows = []
+
+    csvRows.push(headers.join(","))
+
+    filteredRecords.forEach((record) => {
+      const row = [
+        format(parseISO(record.date), "dd/MM/yyyy", { locale: ptBR }),
+        record.callType,
+        record.rank,
+        record.militaryName,
+        record.status,
+      ]
+      csvRows.push(row.map((item) => `"${String(item).replace(/"/g, '""')}"`).join(","))
+    })
+
+    const csvString = csvRows.join("\n")
+    const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.setAttribute("href", url)
+    const filename = selectedDate === "all" ? "historico_faltas_completo.csv" : `faltas_${selectedDate}.csv`
+    link.setAttribute("download", filename)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-48">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
+        <div className="w-full sm:w-1/2 space-y-2">
+          <label
+            htmlFor="date-filter-attendance"
+            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+          >
+            Filtrar por Data
+          </label>
+          <Select value={selectedDate} onValueChange={setSelectedDate}>
+            <SelectTrigger id="date-filter-attendance">
+              <SelectValue placeholder="Todas as datas" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as datas</SelectItem>
+              {uniqueDates.map((date) => (
+                <SelectItem key={date} value={date}>
+                  {format(parseISO(date), "dd/MM/yyyy", { locale: ptBR })}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button onClick={handleExportCsv} disabled={filteredRecords.length === 0} className="w-full sm:w-auto">
+          <Download className="mr-2 h-4 w-4" /> Exportar CSV
+        </Button>
+      </div>
+
+      {Object.keys(groupedRecords).length === 0 ? (
+        <p className="text-muted-foreground">Nenhum registro de falta encontrado.</p>
+      ) : (
+        <div className="space-y-8">
+          {Object.keys(groupedRecords)
+            .sort((a, b) => b.localeCompare(a))
+            .map((date) => (
+              <div key={date} className="space-y-4">
+                <h3 className="text-lg font-semibold">
+                  Data: {format(parseISO(date), "dd/MM/yyyy", { locale: ptBR })}
+                </h3>
+                {Object.keys(groupedRecords[date]).map((callType) => (
+                  <div key={`${date}-${callType}`} className="space-y-2">
+                    <h4 className="text-md font-medium">Chamada: {callType}</h4>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Posto/Graduação</TableHead>
+                            <TableHead>Nome</TableHead>
+                            <TableHead>Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {groupedRecords[date][callType].map((record) => (
+                            <TableRow key={`${record.militaryId}-${record.callType}-${record.date}`}>
+                              <TableCell>{record.rank}</TableCell>
+                              <TableCell className="font-medium">{record.militaryName}</TableCell>
+                              <TableCell>{record.status}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Sub-component for Permanence History
+function PermanenceHistoryContent() {
+  const [allRecords, setAllRecords] = useState<DailyPermanenceRecord[]>([])
+  const [selectedDate, setSelectedDate] = useState<string>("all")
+  const [loading, setLoading] = useState(true)
+
+  const fetchRecords = useCallback(async () => {
+    setLoading(true)
+
+    const { data, error } = await supabase
+      .from("daily_permanence_records")
+      .select("*")
+      .order("date", { ascending: false })
+
+    /* Se a tabela não existir ainda no Supabase, o Postgres retorna o código
+       42P01 (undefined_table). Tratamos isso para não quebrar o app. */
+    if (error) {
+      if (error.code === "42P01") {
+        console.warn("Tabela daily_permanence_records ainda não existe no Supabase – exibindo lista vazia.")
+        setAllRecords([]) // nenhuma quebra – apenas lista vazia
+      } else {
+        console.error("Erro ao buscar histórico de permanência:", error)
+      }
+    } else {
+      setAllRecords(
+        data.map((r) => ({
+          id: r.id,
+          militaryId: r.military_id,
+          militaryName: r.military_name,
+          date: r.date, // string ISO
+          checklist: r.checklist as PermanenceChecklistItem[],
+        })) as DailyPermanenceRecord[],
+      )
+    }
+
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    fetchRecords()
+  }, [fetchRecords])
+
+  const uniqueDates = useMemo(() => {
+    const dates = new Set(allRecords.map((record) => record.date))
+    return Array.from(dates).sort((a, b) => b.localeCompare(a))
+  }, [allRecords])
+
+  const filteredRecords = useMemo(() => {
+    if (selectedDate === "all") {
+      return allRecords
+    }
+    return allRecords.filter((record) => record.date === selectedDate)
+  }, [allRecords, selectedDate])
+
+  const handleExportCsv = () => {
+    if (filteredRecords.length === 0) {
+      alert("Não há dados para exportar.")
+      return
+    }
+
+    const headers = ["Data", "Militar", "Tarefas Concluídas", "Total de Tarefas", "Detalhes do Checklist"]
+    const csvRows = []
+
+    csvRows.push(headers.join(","))
+
+    filteredRecords.forEach((record) => {
+      const completedTasks = record.checklist.filter((item) => item.isCompleted).length
+      const totalTasks = record.checklist.length
+      const checklistDetails = record.checklist
+        .map((item) => `${item.content} [${item.isCompleted ? "Concluído" : "Pendente"}]`)
+        .join("; ")
+
+      const row = [
+        format(parseISO(record.date), "dd/MM/yyyy", { locale: ptBR }),
+        record.militaryName,
+        completedTasks,
+        totalTasks,
+        checklistDetails,
+      ]
+      csvRows.push(row.map((item) => `"${String(item).replace(/"/g, '""')}"`).join(","))
+    })
+
+    const csvString = csvRows.join("\n")
+    const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.setAttribute("href", url)
+    const filename = selectedDate === "all" ? "historico_permanencia_completo.csv" : `permanencia_${selectedDate}.csv`
+    link.setAttribute("download", filename)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-48">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+
+  /* Caso a tabela não exista e allRecords esteja vazio mostramos ajuda. */
+  if (allRecords.length === 0) {
+    return (
+      <p className="text-muted-foreground">
+        Nenhum registro encontrado. Se você ainda não criou a tabela
+        <code className="mx-1">daily_permanence_records</code> no Supabase, execute o script SQL correspondente ou
+        cadastre um checklist para gerar seu primeiro registro.
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
+        <div className="w-full sm:w-1/2 space-y-2">
+          <label
+            htmlFor="date-filter-permanence"
+            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+          >
+            Filtrar por Data
+          </label>
+          <Select value={selectedDate} onValueChange={setSelectedDate}>
+            <SelectTrigger id="date-filter-permanence">
+              <SelectValue placeholder="Todas as datas" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as datas</SelectItem>
+              {uniqueDates.map((date) => (
+                <SelectItem key={date} value={date}>
+                  {format(parseISO(date), "dd/MM/yyyy", { locale: ptBR })}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button onClick={handleExportCsv} disabled={filteredRecords.length === 0} className="w-full sm:w-auto">
+          <Download className="mr-2 h-4 w-4" /> Exportar CSV
+        </Button>
+      </div>
+
+      {filteredRecords.length === 0 ? (
+        <p className="text-muted-foreground">Nenhum registro de permanência salvo.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left text-muted-foreground">
+            <thead className="text-xs text-foreground uppercase bg-muted">
+              <tr>
+                <th scope="col" className="px-6 py-3">
+                  Data
+                </th>
+                <th scope="col" className="px-6 py-3">
+                  Militar
+                </th>
+                <th scope="col" className="px-6 py-3">
+                  Tarefas Concluídas
+                </th>
+                <th scope="col" className="px-6 py-3">
+                  Total de Tarefas
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRecords
+                .sort((a, b) => b.date.localeCompare(a.date))
+                .map((record) => (
+                  <tr key={record.id} className="bg-background border-b hover:bg-muted/50">
+                    <td className="px-6 py-4 font-medium text-foreground whitespace-nowrap">
+                      {format(parseISO(record.date), "dd/MM/yyyy", { locale: ptBR })}
+                    </td>
+                    <td className="px-6 py-4">{record.militaryName}</td>
+                    <td className="px-6 py-4">{record.checklist.filter((item) => item.isCompleted).length}</td>
+                    <td className="px-6 py-4">{record.checklist.length}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Sub-component for Flight History
+function FlightHistoryContent() {
+  const [allRecords, setAllRecords] = useState<FlightRecord[]>([])
+  const [selectedDate, setSelectedDate] = useState<string>("all")
+  const [loading, setLoading] = useState(true)
+
+  const fetchRecords = useCallback(async () => {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from("military_flights")
+      .select("*")
+      .order("date", { ascending: false })
+      .order("time_zulu", { ascending: false })
+    if (error) {
+      console.error("Erro ao buscar histórico de voos:", error)
+    } else {
+      setAllRecords(
+        data.map((f: any) => ({
+          id: f.id,
+          date: parseISO(f.date), // Converter string ISO para Date
+          timeZulu: f.time_zulu,
+          timeBrasilia: f.time_brasilia,
+          pilotIds: f.pilot_ids,
+          description: f.description,
+        })) as FlightRecord[],
+      )
+    }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    fetchRecords()
+  }, [fetchRecords])
+
+  const uniqueDates = useMemo(() => {
+    const dates = new Set(allRecords.map((record) => format(record.date, "yyyy-MM-dd")))
+    return Array.from(dates).sort((a, b) => b.localeCompare(a))
+  }, [allRecords])
+
+  const filteredRecords = useMemo(() => {
+    if (selectedDate === "all") {
+      return allRecords
+    }
+    return allRecords.filter((record) => format(record.date, "yyyy-MM-dd") === selectedDate)
+  }, [allRecords, selectedDate])
+
+  const getPilotNames = (ids: string[]) => {
+    return ids
+      .map((id) => {
+        const pilot = militaryPersonnel.find((p) => p.id === id)
+        return pilot ? `${pilot.rank} ${pilot.name}`.trim() : "Desconhecido"
+      })
+      .join(", ")
+  }
+
+  const handleExportCsv = () => {
+    if (filteredRecords.length === 0) {
+      alert("Não há dados para exportar.")
+      return
+    }
+
+    const headers = ["Data", "Hora (Z)", "Hora (BR)", "Pilotos", "Descrição"]
+    const csvRows = []
+
+    csvRows.push(headers.join(","))
+
+    filteredRecords.forEach((record) => {
+      const row = [
+        format(record.date, "dd/MM/yyyy", { locale: ptBR }),
+        record.timeZulu,
+        record.timeBrasilia,
+        getPilotNames(record.pilotIds),
+        record.description || "-",
+      ]
+      csvRows.push(row.map((item) => `"${String(item).replace(/"/g, '""')}"`).join(","))
+    })
+
+    const csvString = csvRows.join("\n")
+    const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.setAttribute("href", url)
+    const filename = selectedDate === "all" ? "historico_voos_completo.csv" : `voos_${selectedDate}.csv`
+    link.setAttribute("download", filename)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-48">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
+        <div className="w-full sm:w-1/2 space-y-2">
+          <label
+            htmlFor="date-filter-flights"
+            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+          >
+            Filtrar por Data
+          </label>
+          <Select value={selectedDate} onValueChange={setSelectedDate}>
+            <SelectTrigger id="date-filter-flights">
+              <SelectValue placeholder="Todas as datas" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as datas</SelectItem>
+              {uniqueDates.map((date) => (
+                <SelectItem key={date} value={date}>
+                  {format(parseISO(date), "dd/MM/yyyy", { locale: ptBR })}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button onClick={handleExportCsv} disabled={filteredRecords.length === 0} className="w-full sm:w-auto">
+          <Download className="mr-2 h-4 w-4" /> Exportar CSV
+        </Button>
+      </div>
+
+      {filteredRecords.length === 0 ? (
+        <p className="text-muted-foreground">Nenhum voo agendado.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Data</TableHead>
+                <TableHead>Hora (Z)</TableHead>
+                <TableHead>Hora (BR)</TableHead>
+                <TableHead>Pilotos</TableHead>
+                <TableHead>Descrição</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredRecords.map((flight) => (
+                <TableRow key={flight.id}>
+                  <TableCell>{format(flight.date, "dd/MM/yyyy", { locale: ptBR })}</TableCell>
+                  <TableCell>{flight.timeZulu}</TableCell>
+                  <TableCell>{flight.timeBrasilia}</TableCell>
+                  <TableCell>{getPilotNames(flight.pilotIds)}</TableCell>
+                  <TableCell>{flight.description || "-"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Sub-component for Event History
+function EventHistoryContent() {
+  const [allRecords, setAllRecords] = useState<Event[]>([])
+  const [selectedDate, setSelectedDate] = useState<string>("all")
+  const [loading, setLoading] = useState(true)
+
+  const fetchRecords = useCallback(async () => {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from("military_events")
+      .select("*")
+      .order("date", { ascending: false })
+      .order("time", { ascending: false })
+    if (error) {
+      console.error("Erro ao buscar histórico de eventos:", error)
+    } else {
+      setAllRecords(
+        data.map((e: any) => ({
+          id: e.id,
+          title: e.title,
+          description: e.description || undefined,
+          date: parseISO(e.date),
+          time: e.time || undefined,
+          createdByMilitaryId: e.created_by_military_id || undefined,
+        })) as Event[],
+      )
+    }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    fetchRecords()
+  }, [fetchRecords])
+
+  const uniqueDates = useMemo(() => {
+    const dates = new Set(allRecords.map((record) => format(record.date, "yyyy-MM-dd")))
+    return Array.from(dates).sort((a, b) => b.localeCompare(a))
+  }, [allRecords])
+
+  const filteredRecords = useMemo(() => {
+    if (selectedDate === "all") {
+      return allRecords
+    }
+    return allRecords.filter((record) => format(record.date, "yyyy-MM-dd") === selectedDate)
+  }, [allRecords, selectedDate])
+
+  const getMilitaryName = (id: string | undefined) => {
+    if (!id) return "N/A"
+    const military = militaryPersonnel.find((m) => m.id === id)
+    return military ? `${military.rank} ${military.name}`.trim() : "Desconhecido"
+  }
+
+  const handleExportCsv = () => {
+    if (filteredRecords.length === 0) {
+      alert("Não há dados para exportar.")
+      return
+    }
+
+    const headers = ["Data", "Hora", "Título", "Descrição", "Criado Por"]
+    const csvRows = []
+
+    csvRows.push(headers.join(","))
+
+    filteredRecords.forEach((record) => {
+      const row = [
+        format(record.date, "dd/MM/yyyy", { locale: ptBR }),
+        record.time || "-",
+        record.title,
+        record.description || "-",
+        getMilitaryName(record.createdByMilitaryId),
+      ]
+      csvRows.push(row.map((item) => `"${String(item).replace(/"/g, '""')}"`).join(","))
+    })
+
+    const csvString = csvRows.join("\n")
+    const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.setAttribute("href", url)
+    const filename = selectedDate === "all" ? "historico_eventos_completo.csv" : `eventos_${selectedDate}.csv`
+    link.setAttribute("download", filename)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-48">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
+        <div className="w-full sm:w-1/2 space-y-2">
+          <label
+            htmlFor="date-filter-events"
+            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+          >
+            Filtrar por Data
+          </label>
+          <Select value={selectedDate} onValueChange={setSelectedDate}>
+            <SelectTrigger id="date-filter-events">
+              <SelectValue placeholder="Todas as datas" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as datas</SelectItem>
+              {uniqueDates.map((date) => (
+                <SelectItem key={date} value={date}>
+                  {format(parseISO(date), "dd/MM/yyyy", { locale: ptBR })}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button onClick={handleExportCsv} disabled={filteredRecords.length === 0} className="w-full sm:w-auto">
+          <Download className="mr-2 h-4 w-4" /> Exportar CSV
+        </Button>
+      </div>
+
+      {filteredRecords.length === 0 ? (
+        <p className="text-muted-foreground">Nenhum evento registrado.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Data</TableHead>
+                <TableHead>Hora</TableHead>
+                <TableHead>Título</TableHead>
+                <TableHead>Descrição</TableHead>
+                <TableHead>Criado Por</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredRecords.map((event) => (
+                <TableRow key={event.id}>
+                  <TableCell>{format(event.date, "dd/MM/yyyy", { locale: ptBR })}</TableCell>
+                  <TableCell>{event.time || "-"}</TableCell>
+                  <TableCell>{event.title}</TableCell>
+                  <TableCell>{event.description || "-"}</TableCell>
+                  <TableCell>{getMilitaryName(event.createdByMilitaryId)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Sub-component for Key Management History
+function KeyManagementHistoryContent() {
+  const [allMovements, setAllMovements] = useState<KeyMovement[]>([])
+  const [allKeys, setAllKeys] = useState<Key[]>([])
+  const [selectedDate, setSelectedDate] = useState<string>("all")
+  const [loading, setLoading] = useState(true)
+
+  const fetchHistoryData = useCallback(async () => {
+    setLoading(true)
+    const { data: movementsData, error: movementsError } = await supabase
+      .from("claviculario_movements")
+      .select("*")
+      .order("timestamp", { ascending: false })
+
+    if (movementsError) {
+      console.error("Erro ao buscar movimentos de chaves:", movementsError)
+    } else {
+      setAllMovements(
+        movementsData.map((m: any) => ({
+          id: m.id,
+          keyId: m.key_id,
+          type: m.type,
+          militaryId: m.military_id,
+          timestamp: m.timestamp,
+        })) as KeyMovement[],
+      )
+    }
+
+    const { data: keysData, error: keysError } = await supabase.from("claviculario_keys").select("*")
+
+    if (keysError) {
+      console.error("Erro ao buscar chaves para histórico:", keysError)
+    } else {
+      setAllKeys(
+        keysData.map((k: any) => ({
+          id: k.id,
+          roomNumber: k.room_number,
+          roomName: k.room_name,
+        })) as Key[],
+      )
+    }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    fetchHistoryData()
+  }, [fetchHistoryData])
+
+  const uniqueDates = useMemo(() => {
+    const dates = new Set(allMovements.map((movement) => format(parseISO(movement.timestamp), "yyyy-MM-dd")))
+    return Array.from(dates).sort((a, b) => b.localeCompare(a))
+  }, [allMovements])
+
+  const filteredMovements = useMemo(() => {
+    if (selectedDate === "all") {
+      return allMovements
+    }
+    return allMovements.filter((movement) => format(parseISO(movement.timestamp), "yyyy-MM-dd") === selectedDate)
+  }, [allMovements, selectedDate])
+
+  const getKeyDetails = (keyId: string) => {
+    const key = allKeys.find((k) => k.id === keyId)
+    return key ? `${key.roomNumber} - ${key.roomName}` : "Chave Desconhecida"
+  }
+
+  const getMilitaryName = (id: string) => {
+    const military = militaryPersonnel.find((m) => m.id === id)
+    return military ? `${military.rank} ${military.name}`.trim() : "Desconhecido"
+  }
+
+  const handleExportCsv = () => {
+    if (filteredMovements.length === 0) {
+      alert("Não há dados para exportar.")
+      return
+    }
+
+    const headers = ["Data/Hora", "Chave", "Tipo de Movimento", "Militar"]
+    const csvRows = []
+
+    csvRows.push(headers.join(","))
+
+    filteredMovements.forEach((movement) => {
+      const row = [
+        format(parseISO(movement.timestamp), "dd/MM/yyyy HH:mm:ss", { locale: ptBR }),
+        getKeyDetails(movement.keyId),
+        movement.type === "retirada" ? "Retirada" : "Entrega",
+        getMilitaryName(movement.militaryId),
+      ]
+      csvRows.push(row.map((item) => `"${String(item).replace(/"/g, '""')}"`).join(","))
+    })
+
+    const csvString = csvRows.join("\n")
+    const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.setAttribute("href", url)
+    const filename = selectedDate === "all" ? "historico_claviculario_completo.csv" : `claviculario_${selectedDate}.csv`
+    link.setAttribute("download", filename)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-48">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
+        <div className="w-full sm:w-1/2 space-y-2">
+          <label
+            htmlFor="date-filter-keys"
+            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+          >
+            Filtrar por Data
+          </label>
+          <Select value={selectedDate} onValueChange={setSelectedDate}>
+            <SelectTrigger id="date-filter-keys">
+              <SelectValue placeholder="Todas as datas" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as datas</SelectItem>
+              {uniqueDates.map((date) => (
+                <SelectItem key={date} value={date}>
+                  {format(parseISO(date), "dd/MM/yyyy", { locale: ptBR })}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button onClick={handleExportCsv} disabled={filteredMovements.length === 0} className="w-full sm:w-auto">
+          <Download className="mr-2 h-4 w-4" /> Exportar CSV
+        </Button>
+      </div>
+
+      {filteredMovements.length === 0 ? (
+        <p className="text-muted-foreground">Nenhum movimento de chave registrado.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Data/Hora</TableHead>
+                <TableHead>Chave</TableHead>
+                <TableHead>Tipo</TableHead>
+                <TableHead>Militar</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredMovements
+                .sort((a, b) => parseISO(b.timestamp).getTime() - parseISO(a.timestamp).getTime())
+                .map((movement) => (
+                  <TableRow key={movement.id}>
+                    <TableCell>
+                      {format(parseISO(movement.timestamp), "dd/MM/yyyy HH:mm:ss", { locale: ptBR })}
+                    </TableCell>
+                    <TableCell>{getKeyDetails(movement.keyId)}</TableCell>
+                    <TableCell>{movement.type === "retirada" ? "Retirada" : "Entrega"}</TableCell>
+                    <TableCell>{getMilitaryName(movement.militaryId)}</TableCell>
+                  </TableRow>
+                ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function HistoryTabs() {
+  const [activeTab, setActiveTab] = useState("attendance")
+
+  return (
+    <Card className="w-full max-w-5xl mx-auto">
+      <CardHeader>
+        <CardTitle>Histórico</CardTitle>
+        <CardDescription>Visualize e exporte os registros de todos os módulos.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto">
+            <TabsTrigger value="attendance">Faltas</TabsTrigger>
+            <TabsTrigger value="permanence">Permanência</TabsTrigger>
+            <TabsTrigger value="flights">Voos</TabsTrigger>
+            <TabsTrigger value="events">Avisos e Eventos</TabsTrigger>
+            <TabsTrigger value="keys">Claviculário</TabsTrigger>
+          </TabsList>
+          <TabsContent value="attendance" className="mt-6">
+            <AttendanceHistoryContent />
+          </TabsContent>
+          <TabsContent value="permanence" className="mt-6">
+            <PermanenceHistoryContent />
+          </TabsContent>
+          <TabsContent value="flights" className="mt-6">
+            <FlightHistoryContent />
+          </TabsContent>
+          <TabsContent value="events" className="mt-6">
+            <EventHistoryContent />
+          </TabsContent>
+          <TabsContent value="keys" className="mt-6">
+            <KeyManagementHistoryContent />
+          </TabsContent>
+        </Tabs>
+      </CardContent>
+    </Card>
+  )
+}
