@@ -2,8 +2,8 @@
 
 import { Label } from "@/components/ui/label"
 
-import { useState, useEffect, useMemo, useCallback } from "react" // Adicionado useCallback
-import { format, isWithinInterval, parseISO } from "date-fns" // Adicionado parseISO
+import { useState, useEffect, useMemo, useCallback } from "react"
+import { format, isWithinInterval, parseISO } from "date-fns"
 import { ptBR } from "date-fns/locale"
 
 import { Button } from "@/components/ui/button"
@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast"
 
 import { militaryPersonnel, callTypes, absenceReasons } from "@/lib/data"
 import type { AbsenceReason, CallType, Justification, AttendanceRecord } from "@/lib/types"
-import { supabase } from "@/lib/supabase" // Importar o cliente Supabase
+import { supabase } from "@/lib/supabase"
 
 import { CheckCircle, XCircle, Shield, User } from "lucide-react"
 
@@ -30,6 +30,7 @@ export function AttendanceTracker() {
   // Função para buscar justificativas do Supabase
   const fetchJustifications = useCallback(async () => {
     setLoadingJustifications(true)
+    console.log("Fetching justifications from Supabase...")
     const { data, error } = await supabase
       .from("military_justifications")
       .select("*")
@@ -43,13 +44,15 @@ export function AttendanceTracker() {
         variant: "destructive",
       })
     } else {
-      setJustifications(
-        data.map((j: any) => ({
-          ...j,
-          startDate: parseISO(j.start_date), // Converter string ISO para Date
-          endDate: parseISO(j.end_date), // Converter string ISO para Date
-        })),
-      )
+      const fetchedJustifications = data.map((j: any) => ({
+        id: j.id,
+        militaryId: j.military_id,
+        reason: j.reason,
+        startDate: parseISO(j.start_date), // Converter string ISO para Date
+        endDate: parseISO(j.end_date), // Converter string ISO para Date
+      }))
+      setJustifications(fetchedJustifications)
+      console.log("Justificativas carregadas:", fetchedJustifications)
     }
     setLoadingJustifications(false)
   }, [currentDate, toast])
@@ -57,6 +60,7 @@ export function AttendanceTracker() {
   // Função para buscar registros de faltas do Supabase (opcional, para pré-preencher se houver)
   const fetchAttendanceRecords = useCallback(async () => {
     setLoadingAttendance(true)
+    console.log("Fetching attendance records from Supabase...")
     const { data, error } = await supabase
       .from("military_attendance_records")
       .select("*")
@@ -70,15 +74,14 @@ export function AttendanceTracker() {
         variant: "destructive",
       })
     } else {
-      // Pré-preencher attendanceStatuses com dados do Supabase, se existirem
       const initialStatuses: Record<string, AbsenceReason> = {}
       data.forEach((record: AttendanceRecord) => {
-        // Ignorar status justificados para permitir que a lógica de justificativa prevaleça
         if (!record.status.startsWith("JUSTIFICADO")) {
           initialStatuses[record.militaryId] = record.status as AbsenceReason
         }
       })
       setAttendanceStatuses(initialStatuses)
+      console.log("Registros de faltas carregados:", data)
     }
     setLoadingAttendance(false)
   }, [currentDate, toast])
@@ -86,38 +89,18 @@ export function AttendanceTracker() {
   useEffect(() => {
     fetchJustifications()
     fetchAttendanceRecords()
-
-    // --- Bloco de Teste de Conexão Supabase (Remover após verificar) ---
-    const testSupabaseConnection = async () => {
-      console.log("Tentando conectar ao Supabase...")
-      const { data, error } = await supabase.from("military_attendance_records").select("id").limit(1)
-
-      if (error) {
-        console.error("Erro de conexão Supabase:", error)
-        toast({
-          title: "Erro de Conexão Supabase",
-          description: `Detalhes: ${error.message}`,
-          variant: "destructive",
-        })
-      } else {
-        console.log("Conexão Supabase bem-sucedida! Dados de teste:", data)
-        toast({
-          title: "Conexão Supabase OK",
-          description: "Dados de teste recuperados com sucesso.",
-        })
-      }
-    }
-    testSupabaseConnection()
-    // --- Fim do Bloco de Teste ---
   }, [fetchJustifications, fetchAttendanceRecords])
 
   const isMilitaryJustified = (militaryId: string) => {
-    return justifications.some((j) => {
+    const justified = justifications.some((j) => {
       if (j.militaryId === militaryId) {
-        return isWithinInterval(currentDate, { start: j.startDate, end: j.endDate })
+        const isWithin = isWithinInterval(currentDate, { start: j.startDate, end: j.endDate })
+        // console.log(`Militar ${militaryId} - Justificativa: ${j.reason}, Início: ${j.startDate}, Fim: ${j.endDate}, Dentro do intervalo: ${isWithin}`)
+        return isWithin
       }
       return false
     })
+    return justified
   }
 
   const getJustificationReason = (militaryId: string) => {
@@ -151,11 +134,18 @@ export function AttendanceTracker() {
       isJustified: isMilitaryJustified(military.id),
       justificationReason: getJustificationReason(military.id),
     }))
-  }, [justifications, currentDate]) // Depende de justifications e currentDate
+  }, [justifications, currentDate])
 
   const handleStatusChange = (militaryId: string, status: AbsenceReason) => {
     const military = allMilitaryPersonnel.find((m) => m.id === militaryId)
-    if (military?.isJustified) return
+    if (military?.isJustified) {
+      toast({
+        title: "Atenção",
+        description: "Militar justificado não pode ter o status alterado manualmente.",
+        variant: "default",
+      })
+      return
+    }
 
     setAttendanceStatuses((prev) => ({
       ...prev,
@@ -183,7 +173,6 @@ export function AttendanceTracker() {
   }
 
   const handleSaveAttendance = async () => {
-    // Tornar a função assíncrona
     if (!currentCallType) {
       toast({
         title: "Erro",
@@ -204,8 +193,6 @@ export function AttendanceTracker() {
         : attendanceStatuses[military.id] || "AUSENTE",
     }))
 
-    // Primeiro, remover registros existentes para a data e tipo de chamada atuais
-    // Isso evita duplicatas se o usuário salvar várias vezes no mesmo dia/chamada
     const { error: deleteError } = await supabase
       .from("military_attendance_records")
       .delete()
@@ -222,7 +209,6 @@ export function AttendanceTracker() {
       return
     }
 
-    // Inserir os novos registros
     const { error: insertError } = await supabase.from("military_attendance_records").insert(recordsToInsert)
 
     if (insertError) {
@@ -237,7 +223,6 @@ export function AttendanceTracker() {
         title: "Sucesso",
         description: `Registros de faltas para "${currentCallType}" salvos no Supabase!`,
       })
-      // Opcional: Recarregar dados após salvar para garantir consistência
       fetchAttendanceRecords()
     }
   }

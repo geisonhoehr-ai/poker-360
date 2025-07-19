@@ -39,10 +39,11 @@ export function JustificationManager() {
 
   const fetchJustifications = useCallback(async () => {
     setLoadingJustifications(true)
+    console.log("Fetching justifications from Supabase in JustificationManager...")
     const { data, error } = await supabase
       .from("military_justifications")
       .select("*")
-      .order("end_date", { ascending: true }) // Ordenar para melhor visualização
+      .order("end_date", { ascending: true })
 
     if (error) {
       console.error("Erro ao buscar justificativas do Supabase:", error)
@@ -52,15 +53,15 @@ export function JustificationManager() {
         variant: "destructive",
       })
     } else {
-      setJustifications(
-        data.map((j: any) => ({
-          id: j.id,
-          militaryId: j.military_id,
-          reason: j.reason,
-          startDate: new Date(j.start_date),
-          endDate: new Date(j.end_date),
-        })),
-      )
+      const fetchedJustifications = data.map((j: any) => ({
+        id: j.id,
+        militaryId: j.military_id,
+        reason: j.reason,
+        startDate: new Date(j.start_date),
+        endDate: new Date(j.end_date),
+      }))
+      setJustifications(fetchedJustifications)
+      console.log("Justificativas carregadas em JustificationManager:", fetchedJustifications)
     }
     setLoadingJustifications(false)
   }, [toast])
@@ -70,7 +71,6 @@ export function JustificationManager() {
   }, [fetchJustifications])
 
   const handleAddJustification = async () => {
-    // Adicione 'async' aqui
     if (!selectedMilitaryId || !reason || !startDate || !endDate) {
       toast({
         title: "Erro",
@@ -89,9 +89,15 @@ export function JustificationManager() {
       return
     }
 
-    // Formatar datas para o formato 'YYYY-MM-DD' exigido pelo Supabase DATE type
     const formattedStartDate = format(startDate, "yyyy-MM-dd")
     const formattedEndDate = format(endDate, "yyyy-MM-dd")
+
+    console.log("Attempting to insert justification:", {
+      military_id: selectedMilitaryId,
+      reason: reason,
+      start_date: formattedStartDate,
+      end_date: formattedEndDate,
+    })
 
     const { data, error } = await supabase
       .from("military_justifications")
@@ -103,7 +109,7 @@ export function JustificationManager() {
           end_date: formattedEndDate,
         },
       ])
-      .select() // Adicione .select() para obter os dados inseridos, se necessário
+      .select()
 
     if (error) {
       console.error("Erro ao salvar justificativa no Supabase:", error)
@@ -117,7 +123,7 @@ export function JustificationManager() {
         title: "Sucesso",
         description: "Justificativa adicionada e salva no Supabase.",
       })
-      fetchJustifications() // Recarrega a lista após a inserção
+      fetchJustifications()
     }
 
     setSelectedMilitaryId("")
@@ -128,7 +134,7 @@ export function JustificationManager() {
   }
 
   const handleDeleteJustification = async (id: string) => {
-    // Adicione 'async' aqui
+    console.log("Attempting to delete justification with ID:", id)
     const { error } = await supabase.from("military_justifications").delete().eq("id", id)
 
     if (error) {
@@ -143,7 +149,7 @@ export function JustificationManager() {
         title: "Sucesso",
         description: "Justificativa removida do Supabase.",
       })
-      fetchJustifications() // Recarrega a lista após a remoção
+      fetchJustifications()
     }
   }
 
@@ -153,7 +159,6 @@ export function JustificationManager() {
   }
 
   const sortedJustifications = [...justifications].sort((a, b) => {
-    // Sort by end date, then by start date
     if (isEqual(a.endDate, b.endDate)) {
       return isBefore(a.startDate, b.startDate) ? -1 : 1
     }
