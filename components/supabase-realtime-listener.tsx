@@ -1,85 +1,79 @@
 "use client"
 
 import { useEffect } from "react"
-import { supabase } from "@/lib/supabase"
+import { supabase } from "@/lib/supabase" // Corrigido: import { supabase }
 import { useToast } from "@/components/ui/use-toast"
 
-export default function SupabaseRealtimeListener() {
+export function SupabaseRealtimeListener() {
   const { toast } = useToast()
+  // Removido: const supabase = createClient()
 
   useEffect(() => {
+    const handleRealtimeEvent = (payload: any, tableName: string) => {
+      let message = ""
+      let title = ""
+
+      switch (payload.eventType) {
+        case "INSERT":
+          title = `Novo registro em ${tableName}`
+          message = `Um novo item foi adicionado: ${JSON.stringify(payload.new)}`
+          break
+        case "UPDATE":
+          title = `Registro atualizado em ${tableName}`
+          message = `Um item foi atualizado: ${JSON.stringify(payload.new)}`
+          break
+        case "DELETE":
+          title = `Registro excluído em ${tableName}`
+          message = `Um item foi excluído: ${JSON.stringify(payload.old)}`
+          break
+        default:
+          return
+      }
+
+      toast({
+        title: title,
+        description: message,
+        duration: 5000,
+      })
+    }
+
     const channels = [
       supabase
-        .channel("attendance_records_changes")
-        .on("postgres_changes", { event: "*", schema: "public", table: "attendance_records" }, (payload) => {
-          console.log("Change received!", payload)
-          toast({
-            title: "Atualização de Faltas",
-            description: `Registro de falta ${payload.eventType} para ${payload.new?.military_member_name || payload.old?.military_member_name}.`,
-          })
-        })
-        .subscribe(),
-
-      supabase
-        .channel("military_justifications_changes")
-        .on("postgres_changes", { event: "*", schema: "public", table: "military_justifications" }, (payload) => {
-          console.log("Change received!", payload)
-          toast({
-            title: "Atualização de Justificativas",
-            description: `Justificativa ${payload.eventType} para ${payload.new?.military_member_name || payload.old?.military_member_name}.`,
-          })
-        })
-        .subscribe(),
-
-      supabase
         .channel("military_events_changes")
-        .on("postgres_changes", { event: "*", schema: "public", table: "military_events" }, (payload) => {
-          console.log("Change received!", payload)
-          toast({
-            title: "Atualização de Eventos",
-            description: `Evento ${payload.eventType}: ${payload.new?.title || payload.old?.title}.`,
-          })
-        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "military_events" }, (payload) =>
+          handleRealtimeEvent(payload, "Avisos e Eventos"),
+        )
         .subscribe(),
-
       supabase
         .channel("military_flights_changes")
-        .on("postgres_changes", { event: "*", schema: "public", table: "military_flights" }, (payload) => {
-          console.log("Change received!", payload)
-          toast({
-            title: "Atualização de Voos",
-            description: `Voo ${payload.eventType} para ${payload.new?.military_member_name || payload.old?.military_member_name}.`,
-          })
-        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "military_flights" }, (payload) =>
+          handleRealtimeEvent(payload, "Voo"),
+        )
         .subscribe(),
-
+      supabase
+        .channel("military_justifications_changes")
+        .on("postgres_changes", { event: "*", schema: "public", table: "military_justifications" }, (payload) =>
+          handleRealtimeEvent(payload, "Justificativas"),
+        )
+        .subscribe(),
       supabase
         .channel("daily_permanence_records_changes")
-        .on("postgres_changes", { event: "*", schema: "public", table: "daily_permanence_records" }, (payload) => {
-          console.log("Change received!", payload)
-          toast({
-            title: "Atualização de Permanência",
-            description: `Registro de permanência ${payload.eventType} para ${payload.new?.military_member_name || payload.old?.military_member_name}.`,
-          })
-        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "daily_permanence_records" }, (payload) =>
+          handleRealtimeEvent(payload, "Permanência"),
+        )
         .subscribe(),
-
       supabase
         .channel("military_personal_notes_changes")
-        .on("postgres_changes", { event: "*", schema: "public", table: "military_personal_notes" }, (payload) => {
-          console.log("Change received!", payload)
-          toast({
-            title: "Atualização de Notas Pessoais",
-            description: `Nota pessoal ${payload.eventType} para ${payload.new?.military_member_name || payload.old?.military_member_name}.`,
-          })
-        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "military_personal_notes" }, (payload) =>
+          handleRealtimeEvent(payload, "Minhas Notas"),
+        )
         .subscribe(),
     ]
 
     return () => {
       channels.forEach((channel) => supabase.removeChannel(channel))
     }
-  }, [toast])
+  }, [toast, supabase])
 
-  return null
+  return null // Este componente não renderiza nada visível
 }

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { format, parseISO } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { PlusCircle, Pencil, LogIn, LogOut, Trash2, KeyRound } from "lucide-react"
+import { PlusCircle, Pencil, LogIn, LogOut, Trash2 } from "lucide-react" // Importar Trash2
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -36,7 +36,7 @@ export function KeyManagement() {
   const [editingKey, setEditingKey] = useState<Key | null>(null)
 
   const [isMovementDialogOpen, setIsMovementDialogOpen] = useState(false)
-  const [selectedKeyInMovementDialogId, setSelectedKeyInMovementDialogId] = useState<string>("")
+  const [selectedKeyForMovement, setSelectedKeyForMovement] = useState<Key | null>(null)
   const [movementType, setMovementType] = useState<"retirada" | "entrega" | null>(null)
   const [movementMilitaryId, setMovementMilitaryId] = useState<string>("")
 
@@ -61,7 +61,6 @@ export function KeyManagement() {
           roomName: k.room_name,
         })) as Key[],
       )
-      console.log("Chaves carregadas:", data) // Adicionado log para depuração
     }
     setLoadingKeys(false)
   }, [toast])
@@ -126,7 +125,7 @@ export function KeyManagement() {
         toast({ title: "Erro", description: "Não foi possível atualizar a chave.", variant: "destructive" })
       } else {
         toast({ title: "Sucesso", description: "Chave atualizada." })
-        fetchKeys()
+        fetchKeys() // Recarregar chaves
       }
     } else {
       const { error } = await supabase
@@ -138,7 +137,7 @@ export function KeyManagement() {
         toast({ title: "Erro", description: "Não foi possível cadastrar a chave.", variant: "destructive" })
       } else {
         toast({ title: "Sucesso", description: "Chave cadastrada." })
-        fetchKeys()
+        fetchKeys() // Recarregar chaves
       }
     }
     resetKeyForm()
@@ -151,11 +150,15 @@ export function KeyManagement() {
     setIsKeyDialogOpen(true)
   }
 
+  // NOVA FUNÇÃO: handle delete key
   const handleDeleteKey = async (id: string) => {
+    // Adicionar confirmação
     if (!confirm("Tem certeza que deseja excluir esta chave e todos os seus movimentos associados?")) {
-      return
+      return // Cancela a exclusão se o usuário não confirmar
     }
 
+    // O Supabase não permite CASCADE DELETE por padrão para chaves estrangeiras
+    // Então, primeiro, excluímos os movimentos associados a esta chave
     const { error: deleteMovementsError } = await supabase.from("claviculario_movements").delete().eq("key_id", id)
 
     if (deleteMovementsError) {
@@ -168,6 +171,7 @@ export function KeyManagement() {
       return
     }
 
+    // Depois, excluímos a chave em si
     const { error: deleteKeyError } = await supabase.from("claviculario_keys").delete().eq("id", id)
 
     if (deleteKeyError) {
@@ -175,8 +179,8 @@ export function KeyManagement() {
       toast({ title: "Erro", description: "Não foi possível excluir a chave.", variant: "destructive" })
     } else {
       toast({ title: "Sucesso", description: "Chave e seus movimentos foram removidos." })
-      fetchKeys()
-      fetchKeyMovements()
+      fetchKeys() // Recarregar chaves
+      fetchKeyMovements() // Recarregar movimentos para atualizar a lista
     }
   }
 
@@ -188,7 +192,7 @@ export function KeyManagement() {
   const getKeyStatus = (keyId: string) => {
     const movements = keyMovements
       .filter((m) => m.keyId === keyId)
-      .sort((a, b) => parseISO(b.timestamp).getTime() - parseISO(a.timestamp).getTime())
+      .sort((a, b) => parseISO(b.timestamp).getTime() - parseISO(a.timestamp).getTime()) // Ordenar por timestamp decrescente
 
     if (movements.length === 0) {
       return { status: "Disponível", holder: null, time: null, type: null }
@@ -204,29 +208,22 @@ export function KeyManagement() {
     } else {
       return {
         status: "Disponível",
-        holder: getMilitaryName(lastMovement.militaryId),
+        holder: getMilitaryName(lastMovement.militaryId), // Last person who checked it in
         time: lastMovement.timestamp,
         type: "entrega",
       }
     }
   }
 
-  const handleMovementActionFromTable = (key: Key, type: "retirada" | "entrega") => {
-    setSelectedKeyInMovementDialogId(key.id)
+  const handleMovementAction = (key: Key, type: "retirada" | "entrega") => {
+    setSelectedKeyForMovement(key)
     setMovementType(type)
-    setMovementMilitaryId("")
-    setIsMovementDialogOpen(true)
-  }
-
-  const handleOpenGenericMovementDialog = () => {
-    setSelectedKeyInMovementDialogId("")
-    setMovementType(null)
-    setMovementMilitaryId("")
+    setMovementMilitaryId("") // Reset military selection
     setIsMovementDialogOpen(true)
   }
 
   const handleSaveMovement = async () => {
-    if (!selectedKeyInMovementDialogId || !movementType || !movementMilitaryId) {
+    if (!selectedKeyForMovement || !movementType || !movementMilitaryId) {
       toast({
         title: "Erro",
         description: "Por favor, selecione a chave, o tipo de movimento e o militar.",
@@ -236,10 +233,10 @@ export function KeyManagement() {
     }
 
     const newMovement = {
-      key_id: selectedKeyInMovementDialogId,
+      key_id: selectedKeyForMovement.id,
       type: movementType,
       military_id: movementMilitaryId,
-      timestamp: new Date().toISOString(),
+      timestamp: new Date().toISOString(), // Automatic timestamp
     }
 
     const { error } = await supabase.from("claviculario_movements").insert([newMovement])
@@ -248,15 +245,14 @@ export function KeyManagement() {
       console.error("Erro ao salvar movimento de chave:", error)
       toast({ title: "Erro", description: "Não foi possível registrar o movimento.", variant: "destructive" })
     } else {
-      const selectedKey = keys.find((k) => k.id === selectedKeyInMovementDialogId)
       toast({
         title: "Sucesso",
-        description: `Chave ${selectedKey?.roomNumber || ""} - ${selectedKey?.roomName || ""} foi ${movementType === "retirada" ? "retirada" : "entregue"}.`,
+        description: `Chave ${selectedKeyForMovement.roomNumber} - ${selectedKeyForMovement.roomName} foi ${movementType === "retirada" ? "retirada" : "entregue"}.`,
       })
-      fetchKeyMovements()
+      fetchKeyMovements() // Recarregar movimentos
     }
     setIsMovementDialogOpen(false)
-    setSelectedKeyInMovementDialogId("")
+    setSelectedKeyForMovement(null)
     setMovementType(null)
     setMovementMilitaryId("")
   }
@@ -322,53 +318,16 @@ export function KeyManagement() {
           </DialogContent>
         </Dialog>
 
-        {/* Novo botão para registrar movimento genérico */}
+        {/* Dialog for key movements (retirada/entrega) */}
         <Dialog open={isMovementDialogOpen} onOpenChange={setIsMovementDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="w-full" onClick={handleOpenGenericMovementDialog}>
-              <KeyRound className="mr-2 h-4 w-4" /> Registrar Movimento de Chave
-            </Button>
-          </DialogTrigger>
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
-              <DialogTitle>Registrar Movimento de Chave</DialogTitle>
-              <DialogDescription>Selecione a chave, o tipo de movimento e o militar.</DialogDescription>
+              <DialogTitle>{movementType === "retirada" ? "Registrar Retirada" : "Registrar Entrega"}</DialogTitle>
+              <DialogDescription>
+                Chave: {selectedKeyForMovement?.roomNumber} - {selectedKeyForMovement?.roomName}
+              </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="key-select">Chave</Label>
-                <Select
-                  value={selectedKeyInMovementDialogId}
-                  onValueChange={setSelectedKeyInMovementDialogId}
-                  disabled={!!selectedKeyInMovementDialogId && keys.some((k) => k.id === selectedKeyInMovementDialogId)}
-                >
-                  <SelectTrigger id="key-select">
-                    <SelectValue placeholder="Selecione a chave" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {keys.map((key) => (
-                      <SelectItem key={key.id} value={key.id}>
-                        {`${key.roomNumber} - ${key.roomName}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="movement-type">Tipo de Movimento</Label>
-                <Select
-                  value={movementType || ""}
-                  onValueChange={(value: "retirada" | "entrega") => setMovementType(value)}
-                >
-                  <SelectTrigger id="movement-type">
-                    <SelectValue placeholder="Selecione o tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="retirada">Retirada</SelectItem>
-                    <SelectItem value="entrega">Entrega</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
               <div className="space-y-2">
                 <Label htmlFor="movement-military">Militar</Label>
                 <Select value={movementMilitaryId} onValueChange={setMovementMilitaryId}>
@@ -391,7 +350,7 @@ export function KeyManagement() {
             </div>
             <DialogFooter>
               <Button type="submit" onClick={handleSaveMovement}>
-                Confirmar Movimento
+                Confirmar {movementType === "retirada" ? "Retirada" : "Entrega"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -436,7 +395,7 @@ export function KeyManagement() {
                           <Button
                             variant="outline"
                             size="icon"
-                            onClick={() => handleMovementActionFromTable(key, "retirada")}
+                            onClick={() => handleMovementAction(key, "retirada")}
                             aria-label="Registrar retirada"
                           >
                             <LogIn className="h-4 w-4" />
@@ -445,7 +404,7 @@ export function KeyManagement() {
                           <Button
                             variant="outline"
                             size="icon"
-                            onClick={() => handleMovementActionFromTable(key, "entrega")}
+                            onClick={() => handleMovementAction(key, "entrega")}
                             aria-label="Registrar entrega"
                           >
                             <LogOut className="h-4 w-4" />
@@ -462,7 +421,7 @@ export function KeyManagement() {
                         <Button
                           variant="destructive"
                           size="icon"
-                          onClick={() => handleDeleteKey(key.id)}
+                          onClick={() => handleDeleteKey(key.id)} // Adicionado botão de excluir
                           aria-label={`Remover chave ${key.roomNumber}`}
                         >
                           <Trash2 className="h-4 w-4" />

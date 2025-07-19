@@ -1,10 +1,6 @@
 // lib/data.ts
 import type { AbsenceReason, CallType, MilitaryMember, PermanenceChecklistItem } from "./types"
 
-/**
- * Militares cadastrados na aplicação.
- * Caso precise adicionar ou remover nomes, faça aqui.
- */
 export const militaryPersonnel: MilitaryMember[] = [
   { id: "TC-carneiro", rank: "TC", name: "CARNEIRO" },
   { id: "MJ-maia", rank: "MJ", name: "MAIA" },
@@ -48,15 +44,8 @@ export const militaryPersonnel: MilitaryMember[] = [
   { id: "S2-vieira", rank: "S2", name: "VIEIRA" },
 ]
 
-/**
- * Tipos de chamada disponíveis na aplicação.
- */
 export const callTypes: CallType[] = ["Início de Expediente", "Término de Expediente", "Formatura", "Palestra"]
 
-/**
- * Motivos de ausência / presença que aparecem no `AttendanceTracker`.
- * Mantenha a primeira posição como "PRESENTE" para facilitar a UX.
- */
 export const absenceReasons: AbsenceReason[] = [
   "PRESENTE",
   "AUSENTE",
@@ -73,10 +62,6 @@ export const absenceReasons: AbsenceReason[] = [
   "VOO NOTURNO",
 ]
 
-/**
- * Itens padrão do checklist de permanência (PermanenceChecklist).
- * Cada item receberá um `id` incremental quando gravado no banco.
- */
 export const defaultPermanenceChecklistItems: Omit<PermanenceChecklistItem, "id" | "isCompleted">[] = [
   { content: "Verificar e-mails da caixa de entrada." },
   { content: "Checar rádio e sistemas de comunicação." },
@@ -90,9 +75,6 @@ export const defaultPermanenceChecklistItems: Omit<PermanenceChecklistItem, "id"
   { content: "Manter área de trabalho organizada." },
 ]
 
-/**
- * Mensagens motivacionais exibidas no componente DailyQuotes.
- */
 export const motivationalQuotes: string[] = [
   "A disciplina é a ponte entre metas e realizações.",
   "O sucesso é a soma de pequenos esforços repetidos dia após dia.",
@@ -100,13 +82,13 @@ export const motivationalQuotes: string[] = [
   "A persistência realiza o impossível.",
   "Seu único limite é você mesmo.",
   "Grandes coisas nunca vêm de zonas de conforto.",
-  "Acredite em si mesmo e em tudo o que você é.",
+  "Acredite em si mesmo e em tudo o que você é. Saiba que há algo dentro de você que é maior do que qualquer obstáculo.",
   "A força não vem da capacidade física, mas de uma vontade indomável.",
   "Cada dia é uma nova chance para mudar sua vida.",
   "O futuro pertence àqueles que acreditam na beleza de seus sonhos.",
   "A coragem não é a ausência do medo, mas o triunfo sobre ele.",
-  "Faça o necessário para ser feliz, mas lembre-se: felicidade é simples.",
+  "Faça o que for necessário para ser feliz. Mas não se esqueça que a felicidade é um sentimento simples, você pode encontrá-la e deixá-la ir por não perceber sua simplicidade.",
   "O êxito é ir de fracasso em fracasso sem perder o entusiasmo.",
-  "A vida é 10% o que acontece e 90% como você reage.",
-  "Não importa quão devagar você vá, desde que não pare.",
+  "A vida é 10% o que acontece com você e 90% como você reage a isso.",
+  "Não importa o quão devagar você vá, desde que você não pare.",
 ]
