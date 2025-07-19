@@ -1,14 +1,11 @@
--- Desabilita RLS para a tabela daily_permanence_records
-ALTER TABLE public.daily_permanence_records DISABLE ROW LEVEL SECURITY;
+-- Desabilitar RLS para as novas tabelas (se necessário, para migração ou testes)
+-- CUIDADO: Isso remove todas as políticas de RLS existentes para a tabela.
+-- Use com cautela e reabilite as políticas após a operação.
 
--- Desabilita RLS para a tabela military_personal_notes
-ALTER TABLE public.military_personal_notes DISABLE ROW LEVEL SECURITY;
+ALTER TABLE events DISABLE ROW LEVEL SECURITY;
+ALTER TABLE flights DISABLE ROW LEVEL SECURITY;
+ALTER TABLE personal_notes DISABLE ROW LEVEL SECURITY;
 
--- Desabilita RLS para a tabela military_events
-ALTER TABLE public.military_events DISABLE ROW LEVEL SECURITY;
-
--- Desabilita RLS para a tabela military_flights
-ALTER TABLE public.military_flights DISABLE ROW LEVEL SECURITY;
-
--- Opcional: Mensagem de confirmação
-SELECT 'RLS desabilitado para as tabelas daily_permanence_records, military_personal_notes, military_events e military_flights.' AS status;
+ALTER TABLE military_events DISABLE ROW LEVEL SECURITY;
+ALTER TABLE military_flights DISABLE ROW LEVEL SECURITY;
+ALTER TABLE military_personal_notes DISABLE ROW LEVEL SECURITY;

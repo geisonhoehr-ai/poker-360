@@ -5,17 +5,46 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { supabase } from "@/lib/supabase" // Corrigido: import { supabase }
-import { format } from "date-fns"
+import { supabase } from "@/lib/supabase"
+import { format, isValid } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { AnalyticsDashboard } from "./analytics-dashboard" // Importar o novo componente
+import { AnalyticsDashboard } from "./analytics-dashboard"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
-interface MilitaryMember {
-  id: string
-  name: string
-  rank: string
+/* --------------------------------------------------
+   Helpers
+-------------------------------------------------- */
+function safeLower(value: string | null | undefined) {
+  return (value ?? "").toLowerCase()
 }
 
+function formatDate(dateString: string | null | undefined) {
+  if (!dateString) return "—"
+  const d = new Date(dateString)
+  if (!isValid(d)) return dateString
+  return format(d, "dd/MM/yyyy", { locale: ptBR })
+}
+
+/**
+ * Faz SELECT * em <tableName>, mas devolve [] se a tabela não existir
+ * (error.code === "42P01") ou se outro erro acontecer.
+ */
+async function fetchTableSafe<T>(tableName: string): Promise<T[]> {
+  const { data, error } = await supabase.from(tableName).select("*")
+  if (error) {
+    if (error.code === "42P01") {
+      console.warn(`Tabela '${tableName}' não encontrada — ignorando.`)
+      return []
+    }
+    console.error(`Erro ao buscar '${tableName}':`, error)
+    return []
+  }
+  return (data as T[]) ?? []
+}
+
+/* --------------------------------------------------
+   Tipos
+-------------------------------------------------- */
 interface AttendanceRecord {
   id: string
   military_member_id: string
@@ -70,14 +99,26 @@ interface PersonalNoteRecord {
   note_content: string
 }
 
+interface KeyHistoryRecord {
+  id: string
+  date: string
+  key: string
+  action: string
+}
+
+/* --------------------------------------------------
+   Componente
+-------------------------------------------------- */
 export function HistoryTabs() {
   const [activeTab, setActiveTab] = useState("attendance")
+
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([])
   const [justificationRecords, setJustificationRecords] = useState<JustificationRecord[]>([])
   const [eventRecords, setEventRecords] = useState<EventRecord[]>([])
   const [flightRecords, setFlightRecords] = useState<FlightRecord[]>([])
   const [permanenceRecords, setPermanenceRecords] = useState<PermanenceRecord[]>([])
   const [personalNoteRecords, setPersonalNoteRecords] = useState<PersonalNoteRecord[]>([])
+  const [keyHistoryRecords, setKeyHistoryRecords] = useState<KeyHistoryRecord[]>([])
 
   const [attendanceSearch, setAttendanceSearch] = useState("")
   const [attendanceFilterStatus, setAttendanceFilterStatus] = useState("all")
@@ -98,74 +139,73 @@ export function HistoryTabs() {
 
   const [personalNoteSearch, setPersonalNoteSearch] = useState("")
 
-  // Removido: const supabase = createClient()
-
   useEffect(() => {
     const fetchAllRecords = async () => {
-      const { data: attendance, error: attError } = await supabase.from("attendance_records").select("*")
-      if (attError) console.error("Error fetching attendance records:", attError)
-      else setAttendanceRecords(attendance || [])
+      console.log("📥 Carregando dados do histórico...")
 
-      const { data: justifications, error: jusError } = await supabase.from("military_justifications").select("*")
-      if (jusError) console.error("Error fetching justification records:", jusError)
-      else setJustificationRecords(justifications || [])
+      const attPrimary = await fetchTableSafe<AttendanceRecord>("military_attendance_records")
+      if (attPrimary.length) {
+        setAttendanceRecords(attPrimary)
+      } else {
+        const attFallback = await fetchTableSafe<AttendanceRecord>("attendance_records")
+        setAttendanceRecords(attFallback)
+      }
 
-      const { data: events, error: eventError } = await supabase.from("military_events").select("*")
-      if (eventError) console.error("Error fetching event records:", eventError)
-      else setEventRecords(events || [])
+      setJustificationRecords(await fetchTableSafe<JustificationRecord>("military_justifications"))
+      setEventRecords(await fetchTableSafe<EventRecord>("military_events"))
+      setFlightRecords(await fetchTableSafe<FlightRecord>("military_flights"))
+      setPermanenceRecords(await fetchTableSafe<PermanenceRecord>("daily_permanence_records"))
+      setPersonalNoteRecords(await fetchTableSafe<PersonalNoteRecord>("military_personal_notes"))
+      setKeyHistoryRecords(await fetchTableSafe<KeyHistoryRecord>("key_history_records"))
 
-      const { data: flights, error: flightError } = await supabase.from("military_flights").select("*")
-      if (flightError) console.error("Error fetching flight records:", flightError)
-      else setFlightRecords(flights || [])
-
-      const { data: permanence, error: permError } = await supabase.from("daily_permanence_records").select("*")
-      if (permError) console.error("Error fetching permanence records:", permError)
-      else setPermanenceRecords(permanence || [])
-
-      const { data: personalNotes, error: notesError } = await supabase.from("military_personal_notes").select("*")
-      if (notesError) console.error("Error fetching personal notes:", notesError)
-      else setPersonalNoteRecords(personalNotes || [])
+      console.log("✅ Histórico carregado.")
     }
 
     fetchAllRecords()
   }, [])
 
   const filteredAttendance = attendanceRecords.filter(
-    (record) =>
-      record.military_member_name.toLowerCase().includes(attendanceSearch.toLowerCase()) &&
-      (attendanceFilterStatus === "all" || record.status === attendanceFilterStatus),
+    (r) =>
+      safeLower(r.military_member_name).includes(attendanceSearch.toLowerCase()) &&
+      (attendanceFilterStatus === "all" || r.status === attendanceFilterStatus),
   )
 
   const filteredJustifications = justificationRecords.filter(
-    (record) =>
-      record.military_member_name.toLowerCase().includes(justificationSearch.toLowerCase()) &&
-      (justificationFilterStatus === "all" || record.status === justificationFilterStatus) &&
-      (justificationFilterType === "all" || record.type === justificationFilterType),
+    (r) =>
+      safeLower(r.military_member_name).includes(justificationSearch.toLowerCase()) &&
+      (justificationFilterStatus === "all" || r.status === justificationFilterStatus) &&
+      (justificationFilterType === "all" || r.type === justificationFilterType),
   )
 
   const filteredEvents = eventRecords.filter(
-    (record) =>
-      record.title.toLowerCase().includes(eventSearch.toLowerCase()) &&
-      (eventFilterCategory === "all" || record.category === eventFilterCategory),
+    (r) =>
+      safeLower(r.title).includes(eventSearch.toLowerCase()) &&
+      (eventFilterCategory === "all" || r.category === eventFilterCategory),
   )
 
   const filteredFlights = flightRecords.filter(
-    (record) =>
-      record.military_member_name.toLowerCase().includes(flightSearch.toLowerCase()) &&
-      (flightFilterStatus === "all" || record.status === flightFilterStatus) &&
-      (flightFilterType === "all" || record.flight_type === flightFilterType),
+    (r) =>
+      safeLower(r.military_member_name).includes(flightSearch.toLowerCase()) &&
+      (flightFilterStatus === "all" || r.status === flightFilterStatus) &&
+      (flightFilterType === "all" || r.flight_type === flightFilterType),
   )
 
   const filteredPermanence = permanenceRecords.filter(
-    (record) =>
-      record.military_member_name.toLowerCase().includes(permanenceSearch.toLowerCase()) &&
-      (permanenceFilterStatus === "all" || record.status === permanenceFilterStatus),
+    (r) =>
+      safeLower(r.military_member_name).includes(permanenceSearch.toLowerCase()) &&
+      (permanenceFilterStatus === "all" || r.status === permanenceFilterStatus),
   )
 
   const filteredPersonalNotes = personalNoteRecords.filter(
-    (record) =>
-      record.note_content.toLowerCase().includes(personalNoteSearch.toLowerCase()) ||
-      record.military_member_name.toLowerCase().includes(personalNoteSearch.toLowerCase()),
+    (r) =>
+      safeLower(r.note_content).includes(personalNoteSearch.toLowerCase()) ||
+      safeLower(r.military_member_name).includes(personalNoteSearch.toLowerCase()),
+  )
+
+  const filteredKeyHistory = keyHistoryRecords.filter(
+    (r) =>
+      safeLower(r.key).includes(personalNoteSearch.toLowerCase()) ||
+      safeLower(r.action).includes(personalNoteSearch.toLowerCase()),
   )
 
   return (
@@ -175,9 +215,9 @@ export function HistoryTabs() {
       </CardHeader>
       <CardContent>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 h-auto gap-1 p-1">
+          <TabsList className="grid w-full grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 gap-1 p-1">
             <TabsTrigger value="attendance" className="text-xs sm:text-sm px-2 py-2">
-              Faltas
+              Presença
             </TabsTrigger>
             <TabsTrigger value="justifications" className="text-xs sm:text-sm px-2 py-2">
               Justificativas
@@ -194,12 +234,15 @@ export function HistoryTabs() {
             <TabsTrigger value="notes" className="text-xs sm:text-sm px-2 py-2">
               Notas Pessoais
             </TabsTrigger>
+            <TabsTrigger value="keys" className="text-xs sm:text-sm px-2 py-2">
+              Chaves
+            </TabsTrigger>
             <TabsTrigger value="analytics" className="text-xs sm:text-sm px-2 py-2">
               Análises
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="attendance" className="mt-6 animate-in fade-in duration-300">
+          <TabsContent value="attendance" className="mt-6">
             <div className="flex flex-col sm:flex-row gap-4 mb-4">
               <Input
                 placeholder="Buscar militar..."
@@ -219,32 +262,22 @@ export function HistoryTabs() {
               </Select>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs uppercase bg-gray-50 dark:bg-gray-700">
                   <tr>
-                    <th scope="col" className="px-6 py-3">
-                      Militar
-                    </th>
-                    <th scope="col" className="px-6 py-3">
-                      Data
-                    </th>
-                    <th scope="col" className="px-6 py-3">
-                      Status
-                    </th>
-                    <th scope="col" className="px-6 py-3">
-                      Justificativa ID
-                    </th>
+                    <th className="px-6 py-3">Militar</th>
+                    <th className="px-6 py-3">Data</th>
+                    <th className="px-6 py-3">Status</th>
+                    <th className="px-6 py-3">Justificativa ID</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredAttendance.map((record) => (
-                    <tr key={record.id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
-                      <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">
-                        {record.military_member_name}
-                      </td>
-                      <td className="px-6 py-4">{format(new Date(record.date), "dd/MM/yyyy", { locale: ptBR })}</td>
-                      <td className="px-6 py-4">{record.status}</td>
-                      <td className="px-6 py-4">{record.justification_id || "N/A"}</td>
+                  {filteredAttendance.map((r) => (
+                    <tr key={r.id} className="bg-white border-b dark:bg-gray-800">
+                      <td className="px-6 py-4 font-medium whitespace-nowrap">{r.military_member_name}</td>
+                      <td className="px-6 py-4">{formatDate(r.date)}</td>
+                      <td className="px-6 py-4">{r.status}</td>
+                      <td className="px-6 py-4">{r.justification_id ?? "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -252,7 +285,7 @@ export function HistoryTabs() {
             </div>
           </TabsContent>
 
-          <TabsContent value="justifications" className="mt-6 animate-in fade-in duration-300">
+          <TabsContent value="justifications" className="mt-6">
             <div className="flex flex-col sm:flex-row gap-4 mb-4">
               <Input
                 placeholder="Buscar militar ou motivo..."
@@ -286,39 +319,26 @@ export function HistoryTabs() {
               </Select>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs uppercase bg-gray-50 dark:bg-gray-700">
                   <tr>
-                    <th scope="col" className="px-6 py-3">
-                      Militar
-                    </th>
-                    <th scope="col" className="px-6 py-3">
-                      Tipo
-                    </th>
-                    <th scope="col" className="px-6 py-3">
-                      Período
-                    </th>
-                    <th scope="col" className="px-6 py-3">
-                      Motivo
-                    </th>
-                    <th scope="col" className="px-6 py-3">
-                      Status
-                    </th>
+                    <th className="px-6 py-3">Militar</th>
+                    <th className="px-6 py-3">Tipo</th>
+                    <th className="px-6 py-3">Período</th>
+                    <th className="px-6 py-3">Motivo</th>
+                    <th className="px-6 py-3">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredJustifications.map((record) => (
-                    <tr key={record.id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
-                      <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">
-                        {record.military_member_name}
-                      </td>
-                      <td className="px-6 py-4">{record.type}</td>
+                  {filteredJustifications.map((r) => (
+                    <tr key={r.id} className="bg-white border-b dark:bg-gray-800">
+                      <td className="px-6 py-4 font-medium whitespace-nowrap">{r.military_member_name}</td>
+                      <td className="px-6 py-4">{r.type}</td>
                       <td className="px-6 py-4">
-                        {format(new Date(record.start_date), "dd/MM/yyyy", { locale: ptBR })} -{" "}
-                        {format(new Date(record.end_date), "dd/MM/yyyy", { locale: ptBR })}
+                        {formatDate(r.start_date)} – {formatDate(r.end_date)}
                       </td>
-                      <td className="px-6 py-4">{record.reason}</td>
-                      <td className="px-6 py-4">{record.status}</td>
+                      <td className="px-6 py-4">{r.reason}</td>
+                      <td className="px-6 py-4">{r.status}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -326,7 +346,7 @@ export function HistoryTabs() {
             </div>
           </TabsContent>
 
-          <TabsContent value="events" className="mt-6 animate-in fade-in duration-300">
+          <TabsContent value="events" className="mt-6">
             <div className="flex flex-col sm:flex-row gap-4 mb-4">
               <Input
                 placeholder="Buscar título ou descrição..."
@@ -349,32 +369,22 @@ export function HistoryTabs() {
               </Select>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs uppercase bg-gray-50 dark:bg-gray-700">
                   <tr>
-                    <th scope="col" className="px-6 py-3">
-                      Título
-                    </th>
-                    <th scope="col" className="px-6 py-3">
-                      Descrição
-                    </th>
-                    <th scope="col" className="px-6 py-3">
-                      Data
-                    </th>
-                    <th scope="col" className="px-6 py-3">
-                      Categoria
-                    </th>
+                    <th className="px-6 py-3">Título</th>
+                    <th className="px-6 py-3">Descrição</th>
+                    <th className="px-6 py-3">Data</th>
+                    <th className="px-6 py-3">Categoria</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredEvents.map((record) => (
-                    <tr key={record.id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
-                      <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">
-                        {record.title}
-                      </td>
-                      <td className="px-6 py-4">{record.description}</td>
-                      <td className="px-6 py-4">{format(new Date(record.date), "dd/MM/yyyy", { locale: ptBR })}</td>
-                      <td className="px-6 py-4">{record.category}</td>
+                  {filteredEvents.map((r) => (
+                    <tr key={r.id} className="bg-white border-b dark:bg-gray-800">
+                      <td className="px-6 py-4 font-medium whitespace-nowrap">{r.title}</td>
+                      <td className="px-6 py-4">{r.description}</td>
+                      <td className="px-6 py-4">{formatDate(r.date)}</td>
+                      <td className="px-6 py-4">{r.category}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -382,7 +392,7 @@ export function HistoryTabs() {
             </div>
           </TabsContent>
 
-          <TabsContent value="flights" className="mt-6 animate-in fade-in duration-300">
+          <TabsContent value="flights" className="mt-6">
             <div className="flex flex-col sm:flex-row gap-4 mb-4">
               <Input
                 placeholder="Buscar militar..."
@@ -414,32 +424,22 @@ export function HistoryTabs() {
               </Select>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs uppercase bg-gray-50 dark:bg-gray-700">
                   <tr>
-                    <th scope="col" className="px-6 py-3">
-                      Militar
-                    </th>
-                    <th scope="col" className="px-6 py-3">
-                      Data
-                    </th>
-                    <th scope="col" className="px-6 py-3">
-                      Tipo de Voo
-                    </th>
-                    <th scope="col" className="px-6 py-3">
-                      Status
-                    </th>
+                    <th className="px-6 py-3">Militar</th>
+                    <th className="px-6 py-3">Data</th>
+                    <th className="px-6 py-3">Tipo</th>
+                    <th className="px-6 py-3">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredFlights.map((record) => (
-                    <tr key={record.id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
-                      <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">
-                        {record.military_member_name}
-                      </td>
-                      <td className="px-6 py-4">{format(new Date(record.date), "dd/MM/yyyy", { locale: ptBR })}</td>
-                      <td className="px-6 py-4">{record.flight_type}</td>
-                      <td className="px-6 py-4">{record.status}</td>
+                  {filteredFlights.map((r) => (
+                    <tr key={r.id} className="bg-white border-b dark:bg-gray-800">
+                      <td className="px-6 py-4 font-medium whitespace-nowrap">{r.military_member_name}</td>
+                      <td className="px-6 py-4">{formatDate(r.date)}</td>
+                      <td className="px-6 py-4">{r.flight_type}</td>
+                      <td className="px-6 py-4">{r.status}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -447,7 +447,7 @@ export function HistoryTabs() {
             </div>
           </TabsContent>
 
-          <TabsContent value="permanence" className="mt-6 animate-in fade-in duration-300">
+          <TabsContent value="permanence" className="mt-6">
             <div className="flex flex-col sm:flex-row gap-4 mb-4">
               <Input
                 placeholder="Buscar militar ou notas..."
@@ -467,32 +467,22 @@ export function HistoryTabs() {
               </Select>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs uppercase bg-gray-50 dark:bg-gray-700">
                   <tr>
-                    <th scope="col" className="px-6 py-3">
-                      Militar
-                    </th>
-                    <th scope="col" className="px-6 py-3">
-                      Data
-                    </th>
-                    <th scope="col" className="px-6 py-3">
-                      Status
-                    </th>
-                    <th scope="col" className="px-6 py-3">
-                      Notas
-                    </th>
+                    <th className="px-6 py-3">Militar</th>
+                    <th className="px-6 py-3">Data</th>
+                    <th className="px-6 py-3">Status</th>
+                    <th className="px-6 py-3">Notas</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredPermanence.map((record) => (
-                    <tr key={record.id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
-                      <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">
-                        {record.military_member_name}
-                      </td>
-                      <td className="px-6 py-4">{format(new Date(record.date), "dd/MM/yyyy", { locale: ptBR })}</td>
-                      <td className="px-6 py-4">{record.status}</td>
-                      <td className="px-6 py-4">{record.notes || "N/A"}</td>
+                  {filteredPermanence.map((r) => (
+                    <tr key={r.id} className="bg-white border-b dark:bg-gray-800">
+                      <td className="px-6 py-4 font-medium whitespace-nowrap">{r.military_member_name}</td>
+                      <td className="px-6 py-4">{formatDate(r.date)}</td>
+                      <td className="px-6 py-4">{r.status}</td>
+                      <td className="px-6 py-4">{r.notes || "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -500,7 +490,7 @@ export function HistoryTabs() {
             </div>
           </TabsContent>
 
-          <TabsContent value="notes" className="mt-6 animate-in fade-in duration-300">
+          <TabsContent value="notes" className="mt-6">
             <div className="flex flex-col sm:flex-row gap-4 mb-4">
               <Input
                 placeholder="Buscar por conteúdo ou militar..."
@@ -510,28 +500,20 @@ export function HistoryTabs() {
               />
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs uppercase bg-gray-50 dark:bg-gray-700">
                   <tr>
-                    <th scope="col" className="px-6 py-3">
-                      Militar
-                    </th>
-                    <th scope="col" className="px-6 py-3">
-                      Data
-                    </th>
-                    <th scope="col" className="px-6 py-3">
-                      Conteúdo da Nota
-                    </th>
+                    <th className="px-6 py-3">Militar</th>
+                    <th className="px-6 py-3">Data</th>
+                    <th className="px-6 py-3">Nota</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredPersonalNotes.map((record) => (
-                    <tr key={record.id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
-                      <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">
-                        {record.military_member_name}
-                      </td>
-                      <td className="px-6 py-4">{format(new Date(record.date), "dd/MM/yyyy", { locale: ptBR })}</td>
-                      <td className="px-6 py-4">{record.note_content}</td>
+                  {filteredPersonalNotes.map((r) => (
+                    <tr key={r.id} className="bg-white border-b dark:bg-gray-800">
+                      <td className="px-6 py-4 font-medium whitespace-nowrap">{r.military_member_name}</td>
+                      <td className="px-6 py-4">{formatDate(r.date)}</td>
+                      <td className="px-6 py-4">{r.note_content}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -539,7 +521,38 @@ export function HistoryTabs() {
             </div>
           </TabsContent>
 
-          <TabsContent value="analytics" className="mt-6 animate-in fade-in duration-300">
+          <TabsContent value="keys" className="mt-6">
+            <div className="flex flex-col sm:flex-row gap-4 mb-4">
+              <Input
+                placeholder="Buscar por chave ou ação..."
+                value={personalNoteSearch}
+                onChange={(e) => setPersonalNoteSearch(e.target.value)}
+                className="flex-1"
+              />
+            </div>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Chave</TableHead>
+                    <TableHead>Ação</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredKeyHistory.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell>{formatDate(r.date)}</TableCell>
+                      <TableCell>{r.key}</TableCell>
+                      <TableCell>{r.action}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="analytics" className="mt-6">
             <AnalyticsDashboard />
           </TabsContent>
         </Tabs>
@@ -547,3 +560,5 @@ export function HistoryTabs() {
     </Card>
   )
 }
+
+export default HistoryTabs

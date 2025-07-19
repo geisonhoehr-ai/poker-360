@@ -1,345 +1,176 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
-import { format, parseISO } from "date-fns"
-import { ptBR } from "date-fns/locale"
-import { v4 as uuidv4 } from "uuid"
-import { Checkbox } from "@/components/ui/checkbox"
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
+import { militaryPersonnel } from "@/lib/data"
+import { supabase } from "@/lib/supabase"
+import { format } from "date-fns"
+import { toast } from "@/components/ui/use-toast"
+import type { DailyPermanenceRecord } from "@/lib/types"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Input } from "@/components/ui/input" // Import Input for new item
-import { PlusCircle, Trash2, Pencil } from "lucide-react" // Import icons for manage section
-import { useToast } from "@/hooks/use-toast"
-import { militaryPersonnel, defaultPermanenceChecklistItems } from "@/lib/data"
-import type { PermanenceChecklistItem, DailyPermanenceRecord } from "@/lib/types"
 
-export function PermanenceChecklist() {
-  const { toast } = useToast()
-  const [selectedMilitaryId, setSelectedMilitaryId] = useState<string>("")
-  const [currentDailyChecklist, setCurrentDailyChecklist] = useState<PermanenceChecklistItem[]>([]) // For daily completion
-  const [personalChecklistTemplates, setPersonalChecklistTemplates] = useState<
-    Record<string, PermanenceChecklistItem[]>
-  >({}) // For custom templates
+function PermanenceChecklist() {
+  const [checklistItems, setChecklistItems] = useState([
+    { id: 1, text: "Verificar viaturas", checked: false },
+    { id: 2, text: "Conferir armamento", checked: false },
+    { id: 3, text: "Relatar ocorrências", checked: false },
+  ])
+  const [selectedMilitary, setSelectedMilitary] = useState<string>("")
   const [dailyRecords, setDailyRecords] = useState<DailyPermanenceRecord[]>([])
-  const [newChecklistItemContent, setNewChecklistItemContent] = useState<string>("")
-  const [editingChecklistItem, setEditingChecklistItem] = useState<PermanenceChecklistItem | null>(null)
+  const today = format(new Date(), "yyyy-MM-dd")
 
-  const today = useMemo(() => format(new Date(), "yyyy-MM-dd"), [])
-
-  // Filter military personnel for S1 and S2 ranks only
-  const permanenceMilitary = useMemo(() => {
-    return militaryPersonnel.filter((m) => m.rank === "S1" || m.rank === "S2")
+  useEffect(() => {
+    fetchDailyRecords()
   }, [])
 
-  useEffect(() => {
-    // Load all daily records
-    const storedRecords = localStorage.getItem("military_permanence_records")
-    if (storedRecords) {
-      setDailyRecords(JSON.parse(storedRecords))
-    }
-    // Load personal checklist templates
-    const storedTemplates = localStorage.getItem("military_personal_checklist_templates")
-    if (storedTemplates) {
-      setPersonalChecklistTemplates(JSON.parse(storedTemplates))
-    }
-  }, [])
-
-  useEffect(() => {
-    localStorage.setItem("military_permanence_records", JSON.stringify(dailyRecords))
-  }, [dailyRecords])
-
-  useEffect(() => {
-    localStorage.setItem("military_personal_checklist_templates", JSON.stringify(personalChecklistTemplates))
-  }, [personalChecklistTemplates])
-
-  // Load or initialize checklist when military or date changes
-  useEffect(() => {
-    if (!selectedMilitaryId) {
-      setCurrentDailyChecklist([])
-      return
-    }
-
-    const militaryName = permanenceMilitary.find((m) => m.id === selectedMilitaryId)?.name || "Desconhecido"
-
-    // 1. Try to load today's completed checklist for the selected military
-    const todayRecord = dailyRecords.find((record) => record.militaryId === selectedMilitaryId && record.date === today)
-
-    if (todayRecord) {
-      setCurrentDailyChecklist(todayRecord.checklist)
+  const fetchDailyRecords = async () => {
+    const { data, error } = await supabase
+      .from("daily_permanence_records")
+      .select("*")
+      .order("date", { ascending: false })
+      .limit(50)
+    if (error) {
+      console.error("Error fetching daily permanence records:", error)
       toast({
-        title: "Checklist Diário Carregado",
-        description: `Checklist de ${militaryName} para hoje (${format(parseISO(today), "dd/MM/yyyy", { locale: ptBR })}) carregado.`,
+        title: "Erro ao carregar registros diários",
+        description: "Não foi possível carregar os registros de permanência.",
+        variant: "destructive",
       })
     } else {
-      // 2. If no daily record, load the personal template for the selected military
-      const personalTemplate = personalChecklistTemplates[selectedMilitaryId]
-
-      if (personalTemplate && personalTemplate.length > 0) {
-        // Use a copy of the template, resetting completion status for a new day
-        setCurrentDailyChecklist(personalTemplate.map((item) => ({ ...item, isCompleted: false })))
-        toast({
-          title: "Checklist Padrão Carregado",
-          description: `Checklist padrão de ${militaryName} carregado para hoje (${format(parseISO(today), "dd/MM/yyyy", { locale: ptBR })}).`,
-        })
-      } else {
-        // 3. If no personal template, use the global default checklist
-        const newChecklist = defaultPermanenceChecklistItems.map((item) => ({
-          ...item,
-          id: uuidv4(),
-          isCompleted: false,
-        }))
-        setCurrentDailyChecklist(newChecklist)
-        toast({
-          title: "Novo Checklist Padrão",
-          description: `Novo checklist padrão iniciado para ${militaryName} para hoje (${format(parseISO(today), "dd/MM/yyyy", { locale: ptBR })}).`,
-        })
-      }
+      setDailyRecords(data as DailyPermanenceRecord[])
     }
-  }, [selectedMilitaryId, today, dailyRecords, personalChecklistTemplates, permanenceMilitary])
-
-  const handleToggleComplete = (id: string) => {
-    setCurrentDailyChecklist((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, isCompleted: !item.isCompleted } : item)),
-    )
   }
 
-  const handleSaveDailyChecklist = () => {
-    if (!selectedMilitaryId) {
+  const handleCheck = (id: number) => {
+    setChecklistItems(checklistItems.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item)))
+  }
+
+  const handleSaveRecord = async () => {
+    if (!selectedMilitary) {
       toast({
-        title: "Erro",
-        description: "Por favor, selecione o militar em permanência.",
+        title: "Militar não selecionado",
+        description: "Por favor, selecione o militar para registrar o checklist.",
         variant: "destructive",
       })
       return
     }
 
-    const militaryName = permanenceMilitary.find((m) => m.id === selectedMilitaryId)?.name || "Desconhecido"
+    const military = militaryPersonnel.find((m) => m.id === selectedMilitary)
+    if (!military) {
+      toast({
+        title: "Militar não encontrado",
+        description: "O militar selecionado não é válido.",
+        variant: "destructive",
+      })
+      return
+    }
 
-    const newRecord: DailyPermanenceRecord = {
-      id: uuidv4(),
-      militaryId: selectedMilitaryId,
-      militaryName: militaryName,
+    const newRecord: Omit<DailyPermanenceRecord, "id" | "createdAt" | "updatedAt"> = {
+      militaryId: military.id,
+      militaryName: military.name,
       date: today,
-      checklist: currentDailyChecklist,
+      checklist: checklistItems,
+      status: checklistItems.every((item) => item.checked) ? "presente" : "ausente", // Simplified status logic
     }
 
-    // Remove any existing record for today for this military before adding the new one
-    const updatedRecords = dailyRecords.filter(
-      (record) => !(record.militaryId === selectedMilitaryId && record.date === today),
-    )
-    setDailyRecords([...updatedRecords, newRecord])
+    const { error } = await supabase.from("daily_permanence_records").insert([newRecord])
 
-    toast({
-      title: "Checklist Salvo!",
-      description: `Checklist de permanência para ${militaryName} em ${format(parseISO(today), "dd/MM/yyyy", { locale: ptBR })} salvo com sucesso.`,
-    })
-  }
-
-  const getMilitaryName = (id: string) => {
-    const military = permanenceMilitary.find((m) => m.id === id)
-    return military ? `${military.rank} ${military.name}`.trim() : "Selecione o militar"
-  }
-
-  const hasSavedChecklistForToday = useMemo(() => {
-    return dailyRecords.some((record) => record.militaryId === selectedMilitaryId && record.date === today)
-  }, [selectedMilitaryId, today, dailyRecords])
-
-  // --- Template Management Functions ---
-  const handleAddTemplateItem = () => {
-    if (!newChecklistItemContent.trim()) {
+    if (error) {
+      console.error("Error saving daily permanence record:", error)
       toast({
-        title: "Erro",
-        description: "O item do checklist não pode estar vazio.",
+        title: "Erro ao salvar registro",
+        description: error.message,
         variant: "destructive",
       })
-      return
-    }
-
-    const newItem: PermanenceChecklistItem = {
-      id: uuidv4(),
-      content: newChecklistItemContent.trim(),
-      isCompleted: false, // Templates are not completed
-    }
-
-    setPersonalChecklistTemplates((prev) => ({
-      ...prev,
-      [selectedMilitaryId]: [...(prev[selectedMilitaryId] || []), newItem],
-    }))
-    setNewChecklistItemContent("")
-    toast({ title: "Sucesso", description: "Item adicionado ao checklist padrão." })
-  }
-
-  const handleEditTemplateItem = (item: PermanenceChecklistItem) => {
-    setEditingChecklistItem(item)
-    setNewChecklistItemContent(item.content)
-  }
-
-  const handleUpdateTemplateItem = () => {
-    if (!editingChecklistItem || !newChecklistItemContent.trim()) {
+    } else {
       toast({
-        title: "Erro",
-        description: "O item do checklist não pode estar vazio.",
-        variant: "destructive",
+        title: "Registro Salvo!",
+        description: `Checklist de permanência para ${military.name} em ${today} salvo com sucesso.`,
       })
-      return
+      // Reset checklist and selected military
+      setChecklistItems([
+        { id: 1, text: "Verificar viaturas", checked: false },
+        { id: 2, text: "Conferir armamento", checked: false },
+        { id: 3, text: "Relatar ocorrências", checked: false },
+      ])
+      setSelectedMilitary("")
+      fetchDailyRecords() // Refresh history
     }
-
-    setPersonalChecklistTemplates((prev) => ({
-      ...prev,
-      [selectedMilitaryId]: (prev[selectedMilitaryId] || []).map((item) =>
-        item.id === editingChecklistItem.id ? { ...item, content: newChecklistItemContent.trim() } : item,
-      ),
-    }))
-    setNewChecklistItemContent("")
-    setEditingChecklistItem(null)
-    toast({ title: "Sucesso", description: "Item do checklist padrão atualizado." })
   }
-
-  const handleDeleteTemplateItem = (id: string) => {
-    setPersonalChecklistTemplates((prev) => ({
-      ...prev,
-      [selectedMilitaryId]: (prev[selectedMilitaryId] || []).filter((item) => item.id !== id),
-    }))
-    toast({ title: "Sucesso", description: "Item removido do checklist padrão." })
-  }
-
-  const currentMilitaryTemplate = useMemo(() => {
-    return (
-      personalChecklistTemplates[selectedMilitaryId] ||
-      defaultPermanenceChecklistItems.map((item) => ({ ...item, id: uuidv4(), isCompleted: false }))
-    )
-  }, [selectedMilitaryId, personalChecklistTemplates])
 
   return (
-    <Card className="w-full max-w-4xl mx-auto">
-      <CardHeader>
-        <CardTitle>Permanência - Checklist Diário</CardTitle>
-        <CardDescription>
-          Marque as atividades realizadas durante o serviço de permanência.
-          <br />
-          Data atual: {format(parseISO(today), "dd/MM/yyyy", { locale: ptBR })}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-2">
-          <Label htmlFor="military-permanence">Militar em Permanência</Label>
-          <Select value={selectedMilitaryId} onValueChange={setSelectedMilitaryId}>
-            <SelectTrigger id="military-permanence">
-              <SelectValue placeholder="Selecione o militar" />
+    <div className="p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle>Checklist de Permanência</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Select value={selectedMilitary} onValueChange={setSelectedMilitary}>
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione o Militar" />
             </SelectTrigger>
             <SelectContent>
-              {permanenceMilitary.map((military) => (
-                <SelectItem key={military.id} value={military.id}>
-                  {`${military.rank} ${military.name}`.trim()}
+              {militaryPersonnel.map((militar) => (
+                <SelectItem key={militar.id} value={militar.id}>
+                  {militar.rank} {militar.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-        </div>
 
-        {selectedMilitaryId ? (
-          <div className="space-y-8">
-            {/* Section for Daily Completion */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Atividades para {getMilitaryName(selectedMilitaryId)}:</h3>
-              {currentDailyChecklist.length === 0 ? (
-                <p className="text-muted-foreground">Nenhuma atividade definida para o checklist diário.</p>
-              ) : (
-                <div className="space-y-3">
-                  {currentDailyChecklist.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between p-3 border rounded-md bg-card text-card-foreground"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Checkbox
-                          id={`checklist-item-${item.id}`}
-                          checked={item.isCompleted}
-                          onCheckedChange={() => handleToggleComplete(item.id)}
-                          aria-label={`Marcar atividade "${item.content}" como ${item.isCompleted ? "não realizada" : "realizada"}`}
-                        />
-                        <Label
-                          htmlFor={`checklist-item-${item.id}`}
-                          className={`text-base ${item.isCompleted ? "line-through text-muted-foreground" : ""}`}
-                        >
-                          {item.content}
-                        </Label>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <Button onClick={handleSaveDailyChecklist} className="w-full">
-                {hasSavedChecklistForToday ? "Atualizar Checklist do Dia" : "Salvar Checklist do Dia"}
-              </Button>
+          {checklistItems.map((item) => (
+            <div key={item.id} className="flex items-center space-x-2">
+              <Checkbox id={`item-${item.id}`} checked={item.checked} onCheckedChange={() => handleCheck(item.id)} />
+              <Label htmlFor={`item-${item.id}`}>{item.text}</Label>
             </div>
+          ))}
+          <Button onClick={handleSaveRecord} className="w-full">
+            Finalizar Checklist
+          </Button>
+        </CardContent>
+      </Card>
 
-            {/* Section for Template Management - Sempre visível quando um militar é selecionado */}
-            <div className="space-y-4 border-t pt-6 mt-6">
-              <h3 className="text-lg font-semibold">Gerenciar Checklist Padrão do Militar</h3>
-              <p className="text-sm text-muted-foreground">
-                Adicione, edite ou remova itens do checklist padrão para {getMilitaryName(selectedMilitaryId)}.
-              </p>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Adicionar novo item ao checklist padrão..."
-                  value={newChecklistItemContent}
-                  onChange={(e) => setNewChecklistItemContent(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === "Enter") {
-                      if (editingChecklistItem) {
-                        handleUpdateTemplateItem()
-                      } else {
-                        handleAddTemplateItem()
-                      }
-                    }
-                  }}
-                />
-                <Button onClick={editingChecklistItem ? handleUpdateTemplateItem : handleAddTemplateItem} size="icon">
-                  {editingChecklistItem ? <Pencil className="h-4 w-4" /> : <PlusCircle className="h-4 w-4" />}
-                </Button>
-              </div>
-
-              {currentMilitaryTemplate.length === 0 ? (
-                <p className="text-muted-foreground">Nenhum item no checklist padrão.</p>
-              ) : (
-                <div className="space-y-3">
-                  {currentMilitaryTemplate.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between p-3 border rounded-md bg-card text-card-foreground"
-                    >
-                      <Label className="text-base">{item.content}</Label>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleEditTemplateItem(item)}
-                          aria-label={`Editar item "${item.content}"`}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDeleteTemplateItem(item.id)}
-                          aria-label={`Remover item "${item.content}"`}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </div>
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Registros Diários Recentes</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {dailyRecords.length === 0 ? (
+            <p className="text-center text-muted-foreground">Nenhum registro diário encontrado.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="p-2 text-left">Data</th>
+                    <th className="p-2 text-left">Militar</th>
+                    <th className="p-2 text-left">Itens Completos</th>
+                    <th className="p-2 text-left">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dailyRecords.map((record) => (
+                    <tr key={record.id} className="border-b last:border-b-0">
+                      <td className="p-2">{record.date}</td>
+                      <td className="p-2">{record.militaryName}</td>
+                      <td className="p-2">
+                        {record.checklist.filter((item) => item.checked).length} / {record.checklist.length}
+                      </td>
+                      <td className="p-2">{record.status}</td>
+                    </tr>
                   ))}
-                </div>
-              )}
+                </tbody>
+              </table>
             </div>
-          </div>
-        ) : (
-          <p className="text-muted-foreground">Selecione um militar para ver e gerenciar o checklist de permanência.</p>
-        )}
-      </CardContent>
-    </Card>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   )
 }
+
+export { PermanenceChecklist }
+export default PermanenceChecklist

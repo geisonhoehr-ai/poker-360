@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react" // Adicionado useCallback
-import { format, isBefore, isSameDay, setHours, setMinutes, parseISO } from "date-fns" // Adicionado parseISO
+import { useState, useEffect, useRef, useCallback } from "react"
+import { format, isBefore, isSameDay, setHours, setMinutes, parseISO } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { PlusCircle, Trash2, BellRing, Info, Pencil } from "lucide-react"
+import { Calendar } from "@/components/ui/calendar"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
@@ -19,30 +20,28 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 import { DatePicker } from "./date-picker"
 import { militaryPersonnel } from "@/lib/data"
 import type { Event } from "@/lib/types"
-import { supabase } from "@/lib/supabase" // Importar o cliente Supabase
+import { supabase } from "@/lib/supabase"
 
-export function EventCalendar() {
+function EventCalendar() {
   const { toast } = useToast()
   const [events, setEvents] = useState<Event[]>([])
   const [title, setTitle] = useState<string>("")
   const [description, setDescription] = useState<string>("")
-  const [date, setDate] = useState<Date | undefined>(undefined)
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date())
   const [time, setTime] = useState<string>("")
   const [createdByMilitaryId, setCreatedByMilitaryId] = useState<string>("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingEvent, setEditingEvent] = useState<Event | null>(null)
   const notifiedEvents = useRef<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
+  const [date, setDate] = useState<Date | undefined>(new Date())
 
-  // Função para buscar eventos do Supabase
   const fetchEvents = useCallback(async () => {
     setLoading(true)
     const { data, error } = await supabase
@@ -60,9 +59,9 @@ export function EventCalendar() {
           id: e.id,
           title: e.title,
           description: e.description || undefined,
-          date: parseISO(e.date), // Converter string ISO para Date
+          date: parseISO(e.date),
           time: e.time || undefined,
-          createdByMilitaryId: e.created_by_military_id || undefined, // Mapeamento explícito
+          createdByMilitaryId: e.created_by_military_id || undefined,
         })) as Event[],
       )
     }
@@ -73,7 +72,6 @@ export function EventCalendar() {
     fetchEvents()
   }, [fetchEvents])
 
-  // Lógica de notificação (mantida, mas agora com dados do Supabase)
   useEffect(() => {
     const checkEvents = () => {
       const now = new Date()
@@ -83,7 +81,6 @@ export function EventCalendar() {
           let eventDateTime = setHours(event.date, hours)
           eventDateTime = setMinutes(eventDateTime, minutes)
 
-          // Notificar 15 minutos antes ou no horário exato
           const fifteenMinutesBefore = new Date(eventDateTime.getTime() - 15 * 60 * 1000)
 
           if (isSameDay(now, eventDateTime) && now >= fifteenMinutesBefore && now < eventDateTime) {
@@ -99,7 +96,6 @@ export function EventCalendar() {
             now >= eventDateTime &&
             now < new Date(eventDateTime.getTime() + 5 * 60 * 1000)
           ) {
-            // Notificar no horário e por 5 minutos depois
             toast({
               title: "Evento Agora!",
               description: `${event.title} está acontecendo agora. ${event.description ? `Detalhes: ${event.description}` : ""}`,
@@ -120,7 +116,7 @@ export function EventCalendar() {
   const resetForm = () => {
     setTitle("")
     setDescription("")
-    setDate(undefined)
+    setSelectedDate(new Date())
     setTime("")
     setCreatedByMilitaryId("")
     setEditingEvent(null)
@@ -128,7 +124,7 @@ export function EventCalendar() {
   }
 
   const handleSaveEvent = async () => {
-    if (!title || !date) {
+    if (!title || !selectedDate) {
       toast({
         title: "Erro",
         description: "Por favor, preencha o título e a data do evento.",
@@ -139,14 +135,13 @@ export function EventCalendar() {
 
     const eventData = {
       title,
-      description: description || null, // Usar null para campos opcionais vazios
-      date: format(date, "yyyy-MM-dd"), // Formatar para DATE do Supabase
+      description: description || null,
+      date: format(selectedDate, "yyyy-MM-dd"),
       time: time || null,
-      created_by_military_id: createdByMilitaryId || null, // Mapeamento explícito
+      created_by_military_id: createdByMilitaryId || null,
     }
 
     if (editingEvent) {
-      // Update existing event
       const { error } = await supabase.from("military_events").update(eventData).eq("id", editingEvent.id)
 
       if (error) {
@@ -157,10 +152,9 @@ export function EventCalendar() {
           title: "Sucesso",
           description: "Evento atualizado.",
         })
-        fetchEvents() // Recarregar eventos
+        fetchEvents()
       }
     } else {
-      // Add new event
       const { error } = await supabase.from("military_events").insert([eventData])
 
       if (error) {
@@ -171,7 +165,7 @@ export function EventCalendar() {
           title: "Sucesso",
           description: "Evento adicionado.",
         })
-        fetchEvents() // Recarregar eventos
+        fetchEvents()
       }
     }
     resetForm()
@@ -181,7 +175,7 @@ export function EventCalendar() {
     setEditingEvent(event)
     setTitle(event.title)
     setDescription(event.description || "")
-    setDate(event.date)
+    setSelectedDate(event.date)
     setTime(event.time || "")
     setCreatedByMilitaryId(event.createdByMilitaryId || "")
     setIsDialogOpen(true)
@@ -198,7 +192,7 @@ export function EventCalendar() {
         title: "Sucesso",
         description: "Evento removido.",
       })
-      fetchEvents() // Recarregar eventos
+      fetchEvents()
     }
   }
 
@@ -209,39 +203,42 @@ export function EventCalendar() {
   }
 
   const sortedEvents = [...events].sort((a, b) => {
-    // Sort by date, then by time if available
     if (isBefore(a.date, b.date)) return -1
     if (isBefore(b.date, a.date)) return 1
 
     if (a.time && b.time) {
       return a.time.localeCompare(b.time)
     }
-    if (a.time) return -1 // Events with time come before events without time on the same date
+    if (a.time) return -1
     if (b.time) return 1
     return 0
   })
 
   if (loading) {
     return (
-      <Card className="w-full max-w-4xl mx-auto">
-        <CardHeader>
-          <CardTitle>Carregando Eventos...</CardTitle>
-          <CardDescription>Aguarde enquanto carregamos as informações do Supabase.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex justify-center items-center h-48">
+      <div className="w-full max-w-4xl mx-auto">
+        <div className="flex justify-center items-center h-48">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     )
   }
 
   return (
-    <Card className="w-full max-w-4xl mx-auto">
-      <CardHeader>
-        <CardTitle>Avisos e Eventos</CardTitle>
-        <CardDescription>Gerencie reuniões, atividades e lembretes importantes.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
+    <div className="w-full max-w-4xl mx-auto space-y-6">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle>Calendário de Eventos</CardTitle>
+        </CardHeader>
+        <CardContent className="flex justify-center">
+          <Calendar mode="single" selected={date} onSelect={setDate} className="rounded-md border" />
+        </CardContent>
+      </Card>
+      <div className="flex justify-between items-center">
+        <div>
+          <h3 className="text-lg font-semibold">Gerenciar Eventos</h3>
+          <p className="text-muted-foreground">Adicione, edite ou remova eventos importantes.</p>
+        </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button className="w-full" onClick={resetForm}>
@@ -274,7 +271,7 @@ export function EventCalendar() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="event-date">Data</Label>
-                <DatePicker date={date} setDate={setDate} placeholder="Selecione a data do evento" />
+                <DatePicker date={selectedDate} setDate={setSelectedDate} placeholder="Selecione a data do evento" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="event-time">Hora (Opcional)</Label>
@@ -304,68 +301,64 @@ export function EventCalendar() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-
-        <h3 className="text-lg font-semibold mt-8">Próximos Eventos</h3>
-        {sortedEvents.length === 0 ? (
-          <p className="text-muted-foreground">Nenhum evento ou aviso registrado.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Evento</TableHead>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Hora</TableHead>
-                  <TableHead>Criado por</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedEvents.map((event) => (
-                  <TableRow key={event.id}>
-                    <TableCell className="font-medium flex items-center gap-2">
-                      {event.title}
-                      {event.description && (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-xs">
-                              <p>{event.description}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                    </TableCell>
-                    <TableCell>{format(event.date, "dd/MM/yyyy", { locale: ptBR })}</TableCell>
-                    <TableCell>{event.time || "-"}</TableCell>
-                    <TableCell>{getMilitaryName(event.createdByMilitaryId)}</TableCell>
-                    <TableCell className="text-right flex gap-2 justify-end">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEditClick(event)}
-                        aria-label={`Editar evento ${event.title}`}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="icon"
-                        onClick={() => handleDeleteEvent(event.id)}
-                        aria-label={`Remover evento ${event.title}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      </div>
+      <h3 className="text-lg font-semibold mt-8">Próximos Eventos</h3>
+      {sortedEvents.length === 0 ? (
+        <p className="text-muted-foreground">Nenhum evento ou aviso registrado.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr>
+                <th className="font-medium">Evento</th>
+                <th className="font-medium">Data</th>
+                <th className="font-medium">Hora</th>
+                <th className="font-medium">Criado por</th>
+                <th className="font-medium text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedEvents.map((event) => (
+                <tr key={event.id}>
+                  <td className="font-medium flex items-center gap-2">
+                    {event.title}
+                    {event.description && (
+                      <div className="tooltip">
+                        <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                        <span className="tooltiptext">{event.description}</span>
+                      </div>
+                    )}
+                  </td>
+                  <td>{format(event.date, "dd/MM/yyyy", { locale: ptBR })}</td>
+                  <td>{event.time || "-"}</td>
+                  <td>{getMilitaryName(event.createdByMilitaryId)}</td>
+                  <td className="text-right flex gap-2 justify-end">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleEditClick(event)}
+                      aria-label={`Editar evento ${event.title}`}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      onClick={() => handleDeleteEvent(event.id)}
+                      aria-label={`Remover evento ${event.title}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   )
 }
+
+export { EventCalendar }
+export default EventCalendar

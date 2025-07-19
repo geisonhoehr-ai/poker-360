@@ -1,94 +1,277 @@
-// lib/data.ts
-import type { AbsenceReason, CallType, MilitaryMember, PermanenceChecklistItem } from "./types"
+import { createClient } from "@supabase/supabase-js"
+import { unstable_noStore as noStore } from "next/cache"
+import type {
+  MilitaryPersonnel,
+  DailyPermanenceRecord,
+  MilitaryAttendanceRecord,
+  MilitaryJustification,
+  ClavicularioKey,
+  ClavicularioHistory,
+  Event,
+  Flight,
+  PersonalNote,
+  MilitaryPersonalChecklistTemplate,
+  ChecklistTemplateItem,
+  MilitaryPersonalChecklist,
+  ChecklistItemStatus,
+} from "./types"
 
-export const militaryPersonnel: MilitaryMember[] = [
-  { id: "TC-carneiro", rank: "TC", name: "CARNEIRO" },
-  { id: "MJ-maia", rank: "MJ", name: "MAIA" },
-  { id: "CP-miranda", rank: "CP", name: "MIRANDA" },
-  { id: "CP-camila-caldas", rank: "CP", name: "CAMILA CALDAS" },
-  { id: "CP-farias", rank: "CP", name: "FARIAS" },
-  { id: "CP-spinelli", rank: "CP", name: "SPINELLI" },
-  { id: "CP-almeida", rank: "CP", name: "ALMEIDA" },
-  { id: "CP-junior", rank: "CP", name: "JÚNIOR" },
-  { id: "CP-felippe-miranda", rank: "CP", name: "FELIPPE MIRANDA" },
-  { id: "CP-eduardo", rank: "CP", name: "EDUARDO" },
-  { id: "CP-mairink", rank: "CP", name: "MAIRINK" },
-  { id: "1T-ismael", rank: "1T", name: "ISMAEL" },
-  { id: "2T-obregon", rank: "2T", name: "OBREGON" },
-  { id: "SO-eliasafe", rank: "SO", name: "ELIAS" },
-  { id: "1S-menezes", rank: "1S", name: "MENEZES" },
-  { id: "2S-jacobs", rank: "2S", name: "JACOBS" },
-  { id: "2S-ribas", rank: "2S", name: "RIBAS" },
-  { id: "2S-edgar", rank: "2S", name: "EDGAR" },
-  { id: "2S-madureiro", rank: "2S", name: "MADUREIRO" },
-  { id: "2S-oriel", rank: "2S", name: "ORIEL" },
-  { id: "2S-frank", rank: "2S", name: "FRANK" },
-  { id: "3S-braz", rank: "3S", name: "BRAZ" },
-  { id: "3S-pittigliani", rank: "3S", name: "PITTIGLIANI" },
-  { id: "3S-l-teixeira", rank: "3S", name: "L. TEIXEIRA" },
-  { id: "3S-maia", rank: "3S", name: "MAIA" },
-  { id: "3S-anne", rank: "3S", name: "ANNE" },
-  { id: "3S-jaques", rank: "3S", name: "JAQUES" },
-  { id: "3S-vilela", rank: "3S", name: "VILELA" },
-  { id: "3S-hoehr", rank: "3S", name: "HÖEHR" },
-  { id: "3S-henrique", rank: "3S", name: "HENRIQUE" },
-  { id: "S1-vieira", rank: "S1", name: "VIEIRA" },
-  { id: "S1-nycolas", rank: "S1", name: "NYCOLAS" },
-  { id: "S1-gabriel-reis", rank: "S1", name: "GABRIEL REIS" },
-  { id: "S2-mateus-fontoura", rank: "S2", name: "MATEUS FONTOURA" },
-  { id: "S2-douglas-silva", rank: "S2", name: "DOUGLAS SILVA" },
-  { id: "S2-da-rosa", rank: "S2", name: "DA ROSA" },
-  { id: "S2-denardin", rank: "S2", name: "DENARDIN" },
-  { id: "S2-milanesi", rank: "S2", name: "MILANESI" },
-  { id: "S2-joao-gabriel", rank: "S2", name: "JOÃO GABRIEL" },
-  { id: "S2-vieira", rank: "S2", name: "VIEIRA" },
-]
+// Initialize Supabase client
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
-export const callTypes: CallType[] = ["Início de Expediente", "Término de Expediente", "Formatura", "Palestra"]
+// Fetch Military Personnel
+export async function fetchMilitaryPersonnel(): Promise<MilitaryPersonnel[]> {
+  noStore()
+  try {
+    const { data, error } = await supabase.from("military_personnel").select("*").order("name", { ascending: true })
 
-export const absenceReasons: AbsenceReason[] = [
-  "PRESENTE",
-  "AUSENTE",
-  "DISPENSA",
-  "ENTRANDO DE SERVIÇO",
-  "FORMATURA",
-  "GSAU",
-  "HÓRUS",
-  "MERCADO",
-  "REUNIÃO",
-  "SAINDO DE SERVIÇO",
-  "TACF",
-  "VOO ✈︎",
-  "VOO NOTURNO",
-]
+    if (error) {
+      console.error("Database Error:", error)
+      throw new Error("Failed to fetch military personnel.")
+    }
+    return data as MilitaryPersonnel[]
+  } catch (error) {
+    console.error("Failed to fetch military personnel:", error)
+    throw new Error("Failed to fetch military personnel.")
+  }
+}
 
-export const defaultPermanenceChecklistItems: Omit<PermanenceChecklistItem, "id" | "isCompleted">[] = [
-  { content: "Verificar e-mails da caixa de entrada." },
-  { content: "Checar rádio e sistemas de comunicação." },
-  { content: "Registrar entrada/saída de visitantes." },
-  { content: "Verificar segurança das instalações." },
-  { content: "Organizar documentos pendentes." },
-  { content: "Preparar relatório de ocorrências." },
-  { content: "Verificar suprimentos de escritório." },
-  { content: "Realizar ronda de rotina." },
-  { content: "Atender chamadas telefônicas." },
-  { content: "Manter área de trabalho organizada." },
-]
+// Fetch Daily Permanence Records
+export async function fetchDailyPermanenceRecords(): Promise<DailyPermanenceRecord[]> {
+  noStore()
+  try {
+    const { data, error } = await supabase
+      .from("daily_permanence_records")
+      .select("*")
+      .order("date", { ascending: false })
 
-export const motivationalQuotes: string[] = [
-  "A disciplina é a ponte entre metas e realizações.",
-  "O sucesso é a soma de pequenos esforços repetidos dia após dia.",
-  "Não espere por oportunidades, crie-as.",
-  "A persistência realiza o impossível.",
-  "Seu único limite é você mesmo.",
-  "Grandes coisas nunca vêm de zonas de conforto.",
-  "Acredite em si mesmo e em tudo o que você é. Saiba que há algo dentro de você que é maior do que qualquer obstáculo.",
-  "A força não vem da capacidade física, mas de uma vontade indomável.",
-  "Cada dia é uma nova chance para mudar sua vida.",
-  "O futuro pertence àqueles que acreditam na beleza de seus sonhos.",
-  "A coragem não é a ausência do medo, mas o triunfo sobre ele.",
-  "Faça o que for necessário para ser feliz. Mas não se esqueça que a felicidade é um sentimento simples, você pode encontrá-la e deixá-la ir por não perceber sua simplicidade.",
-  "O êxito é ir de fracasso em fracasso sem perder o entusiasmo.",
-  "A vida é 10% o que acontece com você e 90% como você reage a isso.",
-  "Não importa o quão devagar você vá, desde que você não pare.",
-]
+    if (error) {
+      console.error("Database Error:", error)
+      throw new Error("Failed to fetch daily permanence records.")
+    }
+    return data as DailyPermanenceRecord[]
+  } catch (error) {
+    console.error("Failed to fetch daily permanence records:", error)
+    throw new Error("Failed to fetch daily permanence records.")
+  }
+}
+
+// Fetch Military Attendance Records
+export async function fetchMilitaryAttendanceRecords(): Promise<MilitaryAttendanceRecord[]> {
+  noStore()
+  try {
+    const { data, error } = await supabase
+      .from("military_attendance_records")
+      .select("*")
+      .order("date", { ascending: false })
+
+    if (error) {
+      console.error("Database Error:", error)
+      throw new Error("Failed to fetch military attendance records.")
+    }
+    return data as MilitaryAttendanceRecord[]
+  } catch (error) {
+    console.error("Failed to fetch military attendance records:", error)
+    throw new Error("Failed to fetch military attendance records.")
+  }
+}
+
+// Fetch Military Justifications
+export async function fetchMilitaryJustifications(): Promise<MilitaryJustification[]> {
+  noStore()
+  try {
+    const { data, error } = await supabase
+      .from("military_justifications")
+      .select("*")
+      .order("created_at", { ascending: false })
+
+    if (error) {
+      console.error("Database Error:", error)
+      throw new Error("Failed to fetch military justifications.")
+    }
+    return data as MilitaryJustification[]
+  } catch (error) {
+    console.error("Failed to fetch military justifications:", error)
+    throw new Error("Failed to fetch military justifications.")
+  }
+}
+
+// Fetch Claviculario Keys
+export async function fetchClavicularioKeys(): Promise<ClavicularioKey[]> {
+  noStore()
+  try {
+    const { data, error } = await supabase.from("claviculario_keys").select("*").order("key_name", { ascending: true })
+
+    if (error) {
+      console.error("Database Error:", error)
+      throw new Error("Failed to fetch claviculario keys.")
+    }
+    return data as ClavicularioKey[]
+  } catch (error) {
+    console.error("Failed to fetch claviculario keys:", error)
+    throw new Error("Failed to fetch claviculario keys.")
+  }
+}
+
+// Fetch Claviculario History
+export async function fetchClavicularioHistory(): Promise<ClavicularioHistory[]> {
+  noStore()
+  try {
+    const { data, error } = await supabase
+      .from("claviculario_history")
+      .select("*")
+      .order("action_at", { ascending: false })
+
+    if (error) {
+      console.error("Database Error:", error)
+      throw new Error("Failed to fetch claviculario history.")
+    }
+    return data as ClavicularioHistory[]
+  } catch (error) {
+    console.error("Failed to fetch claviculario history:", error)
+    throw new Error("Failed to fetch claviculario history.")
+  }
+}
+
+// Fetch Events
+export async function fetchEvents(): Promise<Event[]> {
+  noStore()
+  try {
+    const { data, error } = await supabase.from("events").select("*").order("start_time", { ascending: true })
+
+    if (error) {
+      console.error("Database Error:", error)
+      throw new Error("Failed to fetch events.")
+    }
+    return data as Event[]
+  } catch (error) {
+    console.error("Failed to fetch events:", error)
+    throw new Error("Failed to fetch events.")
+  }
+}
+
+// Fetch Flights
+export async function fetchFlights(): Promise<Flight[]> {
+  noStore()
+  try {
+    const { data, error } = await supabase.from("flights").select("*").order("departure_time", { ascending: false })
+
+    if (error) {
+      console.error("Database Error:", error)
+      throw new Error("Failed to fetch flights.")
+    }
+    return data as Flight[]
+  } catch (error) {
+    console.error("Failed to fetch flights:", error)
+    throw new Error("Failed to fetch flights.")
+  }
+}
+
+// Fetch Personal Notes
+export async function fetchPersonalNotes(): Promise<PersonalNote[]> {
+  noStore()
+  try {
+    const { data, error } = await supabase.from("personal_notes").select("*").order("created_at", { ascending: false })
+
+    if (error) {
+      console.error("Database Error:", error)
+      throw new Error("Failed to fetch personal notes.")
+    }
+    return data as PersonalNote[]
+  } catch (error) {
+    console.error("Failed to fetch personal notes:", error)
+    throw new Error("Failed to fetch personal notes.")
+  }
+}
+
+// Fetch Military Personal Checklist Templates
+export async function fetchMilitaryPersonalChecklistTemplates(): Promise<MilitaryPersonalChecklistTemplate[]> {
+  noStore()
+  try {
+    const { data, error } = await supabase
+      .from("military_personal_checklist_templates")
+      .select("*")
+      .order("template_name", { ascending: true })
+
+    if (error) {
+      console.error("Database Error:", error)
+      throw new Error("Failed to fetch checklist templates.")
+    }
+    return data as MilitaryPersonalChecklistTemplate[]
+  } catch (error) {
+    console.error("Failed to fetch checklist templates:", error)
+    throw new Error("Failed to fetch checklist templates.")
+  }
+}
+
+// Fetch Checklist Template Items for a given template_id
+export async function fetchChecklistTemplateItems(templateId: string): Promise<ChecklistTemplateItem[]> {
+  noStore()
+  try {
+    const { data, error } = await supabase
+      .from("checklist_template_items")
+      .select("*")
+      .eq("template_id", templateId)
+      .order("item_order", { ascending: true })
+
+    if (error) {
+      console.error("Database Error:", error)
+      throw new Error("Failed to fetch checklist template items.")
+    }
+    return data as ChecklistTemplateItem[]
+  } catch (error) {
+    console.error("Failed to fetch checklist template items:", error)
+    throw new Error("Failed to fetch checklist template items.")
+  }
+}
+
+// Fetch Military Personal Checklists
+export async function fetchMilitaryPersonalChecklists(): Promise<MilitaryPersonalChecklist[]> {
+  noStore()
+  try {
+    const { data, error } = await supabase
+      .from("military_personal_checklists")
+      .select("*")
+      .order("checklist_date", { ascending: false })
+
+    if (error) {
+      console.error("Database Error:", error)
+      throw new Error("Failed to fetch military personal checklists.")
+    }
+    return data as MilitaryPersonalChecklist[]
+  } catch (error) {
+    console.error("Failed to fetch military personal checklists:", error)
+    throw new Error("Failed to fetch military personal checklists.")
+  }
+}
+
+// Fetch Checklist Items Status for a given checklist_id
+export async function fetchChecklistItemsStatus(checklistId: string): Promise<ChecklistItemStatus[]> {
+  noStore()
+  try {
+    const { data, error } = await supabase
+      .from("checklist_items_status")
+      .select("*")
+      .eq("checklist_id", checklistId)
+      .order("created_at", { ascending: true })
+
+    if (error) {
+      console.error("Database Error:", error)
+      throw new Error("Failed to fetch checklist items status.")
+    }
+    return data as ChecklistItemStatus[]
+  } catch (error) {
+    console.error("Failed to fetch checklist items status:", error)
+    throw new Error("Failed to fetch checklist items status.")
+  }
+}
+
+/**
+ * Este arquivo continua a existir para retro-compatibilidade.
+ * Reexporta os dados estáticos definidos em `static-data.ts`.
+ */
+export {
+  militaryPersonnel,
+  callTypes,
+  absenceReasons,
+} from "./static-data"

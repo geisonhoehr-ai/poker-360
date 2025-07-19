@@ -1,79 +1,87 @@
 "use client"
 
 import { useEffect } from "react"
-import { supabase } from "@/lib/supabase" // Corrigido: import { supabase }
-import { useToast } from "@/components/ui/use-toast"
+import { createClient } from "@supabase/supabase-js"
+import { toast } from "sonner"
 
-export function SupabaseRealtimeListener() {
-  const { toast } = useToast()
-  // Removido: const supabase = createClient()
+// Initialize Supabase client
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 
+export default function SupabaseRealtimeListener() {
   useEffect(() => {
-    const handleRealtimeEvent = (payload: any, tableName: string) => {
-      let message = ""
-      let title = ""
-
-      switch (payload.eventType) {
-        case "INSERT":
-          title = `Novo registro em ${tableName}`
-          message = `Um novo item foi adicionado: ${JSON.stringify(payload.new)}`
-          break
-        case "UPDATE":
-          title = `Registro atualizado em ${tableName}`
-          message = `Um item foi atualizado: ${JSON.stringify(payload.new)}`
-          break
-        case "DELETE":
-          title = `Registro excluído em ${tableName}`
-          message = `Um item foi excluído: ${JSON.stringify(payload.old)}`
-          break
-        default:
-          return
-      }
-
-      toast({
-        title: title,
-        description: message,
-        duration: 5000,
+    // Listen for changes in military_attendance_records
+    const attendanceChannel = supabase
+      .channel("military_attendance_records_changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "military_attendance_records" }, (payload) => {
+        console.log("Change received!", payload)
+        toast.info(`Atualização de Presença: ${payload.eventType} na tabela de registros de presença.`)
       })
-    }
+      .subscribe()
 
-    const channels = [
-      supabase
-        .channel("military_events_changes")
-        .on("postgres_changes", { event: "*", schema: "public", table: "military_events" }, (payload) =>
-          handleRealtimeEvent(payload, "Avisos e Eventos"),
-        )
-        .subscribe(),
-      supabase
-        .channel("military_flights_changes")
-        .on("postgres_changes", { event: "*", schema: "public", table: "military_flights" }, (payload) =>
-          handleRealtimeEvent(payload, "Voo"),
-        )
-        .subscribe(),
-      supabase
-        .channel("military_justifications_changes")
-        .on("postgres_changes", { event: "*", schema: "public", table: "military_justifications" }, (payload) =>
-          handleRealtimeEvent(payload, "Justificativas"),
-        )
-        .subscribe(),
-      supabase
-        .channel("daily_permanence_records_changes")
-        .on("postgres_changes", { event: "*", schema: "public", table: "daily_permanence_records" }, (payload) =>
-          handleRealtimeEvent(payload, "Permanência"),
-        )
-        .subscribe(),
-      supabase
-        .channel("military_personal_notes_changes")
-        .on("postgres_changes", { event: "*", schema: "public", table: "military_personal_notes" }, (payload) =>
-          handleRealtimeEvent(payload, "Minhas Notas"),
-        )
-        .subscribe(),
-    ]
+    // Listen for changes in military_justifications
+    const justificationsChannel = supabase
+      .channel("military_justifications_changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "military_justifications" }, (payload) => {
+        console.log("Change received!", payload)
+        toast.info(`Atualização de Justificativa: ${payload.eventType} na tabela de justificativas.`)
+      })
+      .subscribe()
+
+    // Listen for changes in claviculario_keys
+    const keysChannel = supabase
+      .channel("claviculario_keys_changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "claviculario_keys" }, (payload) => {
+        console.log("Change received!", payload)
+        toast.info(`Atualização de Chave: ${payload.eventType} na tabela de chaves.`)
+      })
+      .subscribe()
+
+    // Listen for changes in events
+    const eventsChannel = supabase
+      .channel("events_changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "events" }, (payload) => {
+        console.log("Change received!", payload)
+        toast.info(`Atualização de Evento: ${payload.eventType} na tabela de eventos.`)
+      })
+      .subscribe()
+
+    // Listen for changes in flights
+    const flightsChannel = supabase
+      .channel("flights_changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "flights" }, (payload) => {
+        console.log("Change received!", payload)
+        toast.info(`Atualização de Voo: ${payload.eventType} na tabela de voos.`)
+      })
+      .subscribe()
+
+    // Listen for changes in personal_notes
+    const notesChannel = supabase
+      .channel("personal_notes_changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "personal_notes" }, (payload) => {
+        console.log("Change received!", payload)
+        toast.info(`Atualização de Nota Pessoal: ${payload.eventType} na tabela de notas.`)
+      })
+      .subscribe()
+
+    // Listen for changes in military_personal_checklists
+    const checklistsChannel = supabase
+      .channel("military_personal_checklists_changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "military_personal_checklists" }, (payload) => {
+        console.log("Change received!", payload)
+        toast.info(`Atualização de Checklist: ${payload.eventType} na tabela de checklists.`)
+      })
+      .subscribe()
 
     return () => {
-      channels.forEach((channel) => supabase.removeChannel(channel))
+      supabase.removeChannel(attendanceChannel)
+      supabase.removeChannel(justificationsChannel)
+      supabase.removeChannel(keysChannel)
+      supabase.removeChannel(eventsChannel)
+      supabase.removeChannel(flightsChannel)
+      supabase.removeChannel(notesChannel)
+      supabase.removeChannel(checklistsChannel)
     }
-  }, [toast, supabase])
+  }, [])
 
-  return null // Este componente não renderiza nada visível
+  return null
 }

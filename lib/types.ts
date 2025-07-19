@@ -1,93 +1,148 @@
-// lib/types.ts
-export type MilitaryMember = {
+export type MilitaryPersonnel = {
   id: string
-  rank: string
+  clerk_user_id?: string
   name: string
+  rank: string
+  squadron?: string
+  role: "military" | "admin"
+  email?: string
+  phone_number?: string
+  created_at: string
+  updated_at: string
 }
 
-export type CallType = "Início de Expediente" | "Término de Expediente" | "Formatura" | "Palestra" // Adicionado "Palestra"
-
-export type AbsenceReason =
-  | "PRESENTE"
-  | "AUSENTE"
-  | "DISPENSA"
-  | "ENTRANDO DE SERVIÇO"
-  | "FORMATURA"
-  | "GSAU"
-  | "HÓRUS"
-  | "MERCADO"
-  | "REUNIÃO"
-  | "SAINDO DE SERVIÇO"
-  | "TACF"
-  | "VOO ✈︎"
-  | "VOO NOTURNO"
-
-export type Justification = {
+export type DailyPermanenceRecord = {
   id: string
-  militaryId: string
-  reason: string // e.g., "Férias", "Missão", "Dispensa Laudo, "Curso"
-  startDate: Date
-  endDate: Date
+  military_id: string
+  military_name: string
+  rank: string
+  date: string
+  status: string
+  details?: string
+  created_at: string
+  updated_at: string
 }
 
-export type AttendanceRecord = {
-  id: string // Adicionado ID para facilitar a edição/remoção no histórico
-  militaryId: string
-  militaryName: string // Adicionado para facilitar a exibição/exportação
-  rank: string // Adicionado para facilitar a exibição/exportação
-  callType: CallType
-  date: string // YYYY-MM-DD
-  status: AbsenceReason
+export type MilitaryAttendanceRecord = {
+  id: string
+  military_id: string
+  military_name: string
+  rank: string
+  call_type: string
+  date: string
+  status: string
+  justification?: string
+  created_at: string
+  updated_at: string
+}
+
+export type MilitaryJustification = {
+  id: string
+  military_id: string
+  military_name: string
+  type: string
+  reason: string
+  start_date: string
+  end_date: string
+  approved: boolean
+  approved_by?: string
+  created_at: string
+  updated_at: string
+}
+
+export type ClavicularioKey = {
+  id: string
+  key_name: string
+  location?: string
+  status: "Disponível" | "Em Uso" | "Manutenção" | "Perdida"
+  last_checked_out_by?: string
+  last_checked_out_at?: string
+  last_checked_in_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export type ClavicularioHistory = {
+  id: string
+  key_id: string
+  military_id: string
+  military_name: string
+  action: "Retirada" | "Devolvida"
+  action_at: string
+  notes?: string
 }
 
 export type Event = {
   id: string
   title: string
-  description?: string // Nova propriedade
-  date: Date
-  time?: string // Optional time, e.g., "14:30"
-  createdByMilitaryId?: string // Novo: Militar que criou o evento
+  description?: string
+  start_time: string
+  end_time: string
+  location?: string
+  created_by?: string
+  created_at: string
+  updated_at: string
 }
 
-export type NoteItem = {
+export type Flight = {
   id: string
+  flight_number: string
+  aircraft_type?: string
+  departure_time: string
+  arrival_time: string
+  origin: string
+  destination: string
+  pilot_id?: string
+  copilot_id?: string
+  status: "Scheduled" | "Departed" | "Arrived" | "Cancelled" | "Delayed"
+  notes?: string
+  created_at: string
+  updated_at: string
+}
+
+export type PersonalNote = {
+  id: string
+  military_id: string
+  title: string
   content: string
-  isCompleted: boolean
+  created_at: string
+  updated_at: string
 }
 
-export type PermanenceChecklistItem = {
+export type MilitaryPersonalChecklistTemplate = {
   id: string
-  content: string
-  isCompleted: boolean
+  template_name: string
+  description?: string
+  created_at: string
+  updated_at: string
 }
 
-export type DailyPermanenceRecord = {
-  id: string // UUID for the record
-  militaryId: string
-  militaryName: string
-  date: string // YYYY-MM-DD
-  checklist: PermanenceChecklistItem[]
-}
-
-export type FlightRecord = {
+export type ChecklistTemplateItem = {
   id: string
-  date: Date
-  timeZulu: string // Horário em Zulu (UTC)
-  timeBrasilia: string // Horário local de Brasília
-  pilotIds: string[] // IDs dos pilotos
-  description?: string // Detalhes do voo
+  template_id: string
+  item_description: string
+  item_order: number
+  created_at: string
+  updated_at: string
 }
 
-export type Key = {
+export type MilitaryPersonalChecklist = {
   id: string
-  roomNumber: string
-  roomName: string
+  military_id: string
+  template_id: string
+  checklist_date: string
+  status: "Pending" | "Completed" | "In Progress"
+  created_at: string
+  updated_at: string
 }
 
-export type KeyMovement = {
+export type ChecklistItemStatus = {
   id: string
-  keyId: string
-  type: "retirada" | "entrega"
-  militaryId: string
-  timestamp: string // ISO string
+  checklist_id: string
+  template_item_id: string
+  is_completed: boolean
+  completed_at?: string
+  notes?: string
+  created_at: string
+  updated_at: string
 }
