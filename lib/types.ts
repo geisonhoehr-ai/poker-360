@@ -5,7 +5,7 @@ export type MilitaryMember = {
   name: string
 }
 
-export type CallType = "Início de Expediente" | "Término de Expediente" | "Formatura" | "Palestra" // Adicionado "Palestra"
+export type CallType = "Início de Expediente" | "Término de Expediente" | "Formatura" | "Palestra"
 
 export type AbsenceReason =
   | "PRESENTE"
@@ -25,28 +25,28 @@ export type AbsenceReason =
 export type Justification = {
   id: string
   militaryId: string
-  reason: string // e.g., "Férias", "Missão", "Dispensa Laudo, "Curso"
+  reason: string
   startDate: Date
   endDate: Date
 }
 
 export type AttendanceRecord = {
-  id: string // Adicionado ID para facilitar a edição/remoção no histórico
+  id: string
   militaryId: string
-  militaryName: string // Adicionado para facilitar a exibição/exportação
-  rank: string // Adicionado para facilitar a exibição/exportação
+  militaryName: string
+  rank: string
   callType: CallType
-  date: string // YYYY-MM-DD
+  date: string
   status: AbsenceReason
 }
 
 export type Event = {
   id: string
   title: string
-  description?: string // Nova propriedade
+  description?: string
   date: Date
-  time?: string // Optional time, e.g., "14:30"
-  createdByMilitaryId?: string // Novo: Militar que criou o evento
+  time?: string
+  createdByMilitaryId?: string
 }
 
 export type NoteItem = {
@@ -62,20 +62,20 @@ export type PermanenceChecklistItem = {
 }
 
 export type DailyPermanenceRecord = {
-  id: string // UUID for the record
+  id: string
   militaryId: string
   militaryName: string
-  date: string // YYYY-MM-DD
+  date: string
   checklist: PermanenceChecklistItem[]
 }
 
 export type FlightRecord = {
   id: string
   date: Date
-  timeZulu: string // Horário em Zulu (UTC)
-  timeBrasilia: string // Horário local de Brasília
-  pilotIds: string[] // IDs dos pilotos
-  description?: string // Detalhes do voo
+  timeZulu: string
+  timeBrasilia: string
+  pilotIds: string[]
+  description?: string
 }
 
 export type Key = {
@@ -89,5 +89,5 @@ export type KeyMovement = {
   keyId: string
   type: "retirada" | "entrega"
   militaryId: string
-  timestamp: string // ISO string
+  timestamp: string
 }
