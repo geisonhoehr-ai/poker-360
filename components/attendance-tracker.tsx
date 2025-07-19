@@ -95,6 +95,7 @@ export function AttendanceTracker() {
     const justified = justifications.some((j) => {
       if (j.militaryId === militaryId) {
         const isWithin = isWithinInterval(currentDate, { start: j.startDate, end: j.endDate })
+        // console.log(`Militar ${militaryId} - Justificativa: ${j.reason}, Início: ${j.startDate}, Fim: ${j.endDate}, Dentro do intervalo: ${isWithin}`)
         return isWithin
       }
       return false

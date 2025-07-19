@@ -4,8 +4,8 @@ import * as React from "react"
 import {
   Bar,
   BarChart,
-  CartesianGrid,
   Cell,
+  CartesianGrid,
   Legend,
   Line,
   LineChart,
@@ -22,30 +22,34 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 
 /* -------------------------------------------------------------------------- */
-/*                                 TYPES                                      */
+/*                              AUXILIARY TYPES                               */
 /* -------------------------------------------------------------------------- */
 
 export type ChartType = "bar" | "line" | "pie"
 
 export interface ChartProps {
+  /* Dados a serem renderizados. */
   data: Record<string, any>[]
+  /* Tipo do gráfico. */
   type: ChartType
-  /* eixo-X (bar/line) ou rótulo (pie) */
+  /* Chave do eixo-x (bar/line) ou rótulo (pie). */
   dataKey?: string
-  /* valor numérico (bar/line/pie)         */
+  /* Chave do valor (bar/line) ou fatia (pie). */
   valueKey?: string
-  /* nome (pie) – caso diferente de dataKey */
+  /* (Pie) Chave do nome da fatia — caso diferente do dataKey. */
   nameKey?: string
+  /* Título e descrição opcionais. */
   title?: React.ReactNode
   description?: React.ReactNode
+  /* Cores personalizadas (usado no Pie). */
   colors?: string[]
 }
 
-/* -------------------------------------------------------------------------- */
-/*                         SHARED “WRAPPER” CSS                               */
-/* -------------------------------------------------------------------------- */
+/* ----------------------------- ChartContainer ----------------------------- */
+/* Envelope genérico — exportado para compatibilidade com outros componentes. */
 
 export interface ChartContainerProps extends React.ComponentProps<"div"> {}
+
 export const ChartContainer = React.forwardRef<HTMLDivElement, ChartContainerProps>(
   ({ className, children, ...props }, ref) => (
     <div ref={ref} className={cn("w-full h-full flex items-center justify-center", className)} {...props}>
@@ -55,11 +59,11 @@ export const ChartContainer = React.forwardRef<HTMLDivElement, ChartContainerPro
 )
 ChartContainer.displayName = "ChartContainer"
 
-/* ------------------------------- TOOLTIP ---------------------------------- */
+/* ----------------------------- TooltipContent ----------------------------- */
 
 export const ChartTooltipContent = React.forwardRef<HTMLDivElement, TooltipProps["payload"] & { label?: unknown }>(
   function ChartTooltip({ active, payload, label }, ref) {
-    if (!active || !payload?.length) return null
+    if (!active || !payload || payload.length === 0) return null
 
     return (
       <div ref={ref} className="rounded-md border border-border/40 bg-background px-3 py-2 text-xs shadow-lg space-y-1">
@@ -77,7 +81,7 @@ export const ChartTooltipContent = React.forwardRef<HTMLDivElement, TooltipProps
 )
 ChartTooltipContent.displayName = "ChartTooltipContent"
 
-/* ------------------------------- LEGEND ----------------------------------- */
+/* ------------------------------ LegendContent ----------------------------- */
 
 export const ChartLegendContent = React.forwardRef<HTMLDivElement, LegendProps>(({ payload, ...rest }, ref) => {
   if (!payload?.length) return null
@@ -95,7 +99,7 @@ export const ChartLegendContent = React.forwardRef<HTMLDivElement, LegendProps>(
 ChartLegendContent.displayName = "ChartLegendContent"
 
 /* -------------------------------------------------------------------------- */
-/*                                   CHART                                    */
+/*                                  CHART                                     */
 /* -------------------------------------------------------------------------- */
 
 const DEFAULT_COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#AF19FF", "#FF1919"]
@@ -110,11 +114,11 @@ export function Chart({
   description,
   colors = DEFAULT_COLORS,
 }: ChartProps) {
-  /* Cells color helper for PieChart */
+  // Utilitário para renderizar células coloridas em PieChart
   const renderPieCells = (entries: Record<string, any>[]) =>
     entries.map((_, idx) => <Cell key={`cell-${idx}`} fill={colors[idx % colors.length]} />)
 
-  const chartJSX = (
+  const chartBody = (
     <ResponsiveContainer width="100%" height={300}>
       {type === "bar" && (
         <BarChart data={data}>
@@ -159,22 +163,28 @@ export function Chart({
     </ResponsiveContainer>
   )
 
-  /* Card wrapper opcional */
+  // Se não for necessário Card, pode-se retornar só o container.
   return title || description ? (
     <Card>
-      <CardHeader>
-        {title && <CardTitle>{title}</CardTitle>}
-        {description && <p className="text-sm text-muted-foreground">{description}</p>}
-      </CardHeader>
+      {(title || description) && (
+        <CardHeader>
+          {title && <CardTitle>{title}</CardTitle>}
+          {description && <p className="text-sm text-muted-foreground">{description}</p>}
+        </CardHeader>
+      )}
       <CardContent>
-        <ChartContainer>{chartJSX}</ChartContainer>
+        <ChartContainer>{chartBody}</ChartContainer>
       </CardContent>
     </Card>
   ) : (
-    <ChartContainer>{chartJSX}</ChartContainer>
+    <ChartContainer>{chartBody}</ChartContainer>
   )
 }
 
-/* -------------------------- RE-EXPORTS ÚTEIS ------------------------------ */
+/* ------------------------------- EXPORTS ---------------------------------- */
 
-export { Legend as ChartLegend, RechartsTooltip as ChartTooltip }
+export {
+  /* Re-exports de utilidade (para compatibilidade com códigos já existentes) */
+  Legend as ChartLegend,
+  RechartsTooltip as ChartTooltip,
+}
