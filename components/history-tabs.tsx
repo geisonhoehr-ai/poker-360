@@ -8,13 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/lib/supabase" // Corrigido: import { supabase }
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { AnalyticsDashboard } from "./analytics-dashboard" // Importar o novo componente
-
-interface MilitaryMember {
-  id: string
-  name: string
-  rank: string
-}
+import { AnalyticsDashboard } from "./analytics-dashboard"
 
 interface AttendanceRecord {
   id: string
@@ -98,10 +92,9 @@ export function HistoryTabs() {
 
   const [personalNoteSearch, setPersonalNoteSearch] = useState("")
 
-  // Removido: const supabase = createClient()
-
   useEffect(() => {
     const fetchAllRecords = async () => {
+      console.log("Fetching all records for HistoryTabs...")
       const { data: attendance, error: attError } = await supabase.from("attendance_records").select("*")
       if (attError) console.error("Error fetching attendance records:", attError)
       else setAttendanceRecords(attendance || [])
@@ -125,6 +118,7 @@ export function HistoryTabs() {
       const { data: personalNotes, error: notesError } = await supabase.from("military_personal_notes").select("*")
       if (notesError) console.error("Error fetching personal notes:", notesError)
       else setPersonalNoteRecords(personalNotes || [])
+      console.log("Finished fetching all records.")
     }
 
     fetchAllRecords()

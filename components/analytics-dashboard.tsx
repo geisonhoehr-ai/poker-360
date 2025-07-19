@@ -1,201 +1,217 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { supabase } from "@/lib/supabase" // Corrigido: import { supabase }
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Chart } from "@/components/ui/chart"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Skeleton } from "@/components/ui/skeleton"
+import { supabase } from "@/lib/supabase"
+import { format } from "date-fns"
 
-interface AttendanceData {
+interface AttendanceRecord {
+  id: string
+  military_member_id: string
+  military_member_name: string
   date: string
-  present: number
-  absent: number
+  status: string
 }
 
-interface EventData {
+interface JustificationRecord {
+  id: string
+  military_member_id: string
+  military_member_name: string
+  type: string
+  status: string
+}
+
+interface EventRecord {
+  id: string
+  date: string
   category: string
-  count: number
 }
 
-interface FlightData {
-  status: string
-  count: number
+interface FlightRecord {
+  id: string
+  date: string
+  flight_type: string
 }
 
-interface PermanenceData {
+interface PermanenceRecord {
+  id: string
+  date: string
   status: string
-  count: number
 }
 
 export function AnalyticsDashboard() {
-  const [attendanceData, setAttendanceData] = useState<AttendanceData[]>([])
-  const [eventData, setEventData] = useState<EventData[]>([])
-  const [flightData, setFlightData] = useState<FlightData[]>([])
-  const [permanenceData, setPermanenceData] = useState<PermanenceData[]>([])
-  const [loading, setLoading] = useState(true)
-  // Removido: const supabase = createClient()
+  const [attendanceData, setAttendanceData] = useState<any[]>([])
+  const [justificationData, setJustificationData] = useState<any[]>([])
+  const [eventData, setEventData] = useState<any[]>([])
+  const [flightData, setFlightData] = useState<any[]>([])
+  const [permanenceData, setPermanenceData] = useState<any[]>([])
 
   useEffect(() => {
     const fetchData = async () => {
-      setLoading(true)
       // Fetch Attendance Data
-      const { data: attendanceRecords, error: attendanceError } = await supabase
-        .from("attendance_records")
-        .select("date, status")
-      if (attendanceError) console.error("Error fetching attendance data:", attendanceError)
-      if (attendanceRecords) {
-        const dailySummary: { [key: string]: { present: number; absent: number } } = {}
-        attendanceRecords.forEach((record) => {
-          const date = new Date(record.date).toLocaleDateString("pt-BR")
-          if (!dailySummary[date]) {
-            dailySummary[date] = { present: 0, absent: 0 }
-          }
-          if (record.status === "presente") {
-            dailySummary[date].present++
-          } else {
-            dailySummary[date].absent++
-          }
-        })
-        const formattedAttendance = Object.keys(dailySummary).map((date) => ({
-          date,
-          present: dailySummary[date].present,
-          absent: dailySummary[date].absent,
-        }))
-        setAttendanceData(formattedAttendance)
+      const { data: attendance, error: attError } = await supabase.from("attendance_records").select("*")
+      if (attError) console.error("Error fetching attendance for analytics:", attError)
+      else {
+        const dailyAttendance = attendance.reduce(
+          (acc: { [key: string]: { presente: number; ausente: number } }, record: AttendanceRecord) => {
+            const date = format(new Date(record.date), "yyyy-MM-dd")
+            if (!acc[date]) {
+              acc[date] = { presente: 0, ausente: 0 }
+            }
+            if (record.status === "presente") {
+              acc[date].presente++
+            } else if (record.status === "ausente") {
+              acc[date].ausente++
+            }
+            return acc
+          },
+          {},
+        )
+        setAttendanceData(Object.keys(dailyAttendance).map((date) => ({ date, ...dailyAttendance[date] })))
+      }
+
+      // Fetch Justification Data
+      const { data: justifications, error: jusError } = await supabase.from("military_justifications").select("*")
+      if (jusError) console.error("Error fetching justifications for analytics:", jusError)
+      else {
+        const statusCounts = justifications.reduce((acc: { [key: string]: number }, record: JustificationRecord) => {
+          acc[record.status] = (acc[record.status] || 0) + 1
+          return acc
+        }, {})
+        setJustificationData(Object.keys(statusCounts).map((status) => ({ status, count: statusCounts[status] })))
       }
 
       // Fetch Event Data
-      const { data: events, error: eventError } = await supabase.from("military_events").select("category")
-      if (eventError) console.error("Error fetching event data:", eventError)
-      if (events) {
-        const categoryCounts: { [key: string]: number } = {}
-        events.forEach((event) => {
-          categoryCounts[event.category] = (categoryCounts[event.category] || 0) + 1
-        })
-        const formattedEvents = Object.keys(categoryCounts).map((category) => ({
-          category,
-          count: categoryCounts[category],
-        }))
-        setEventData(formattedEvents)
+      const { data: events, error: eventError } = await supabase.from("military_events").select("*")
+      if (eventError) console.error("Error fetching events for analytics:", eventError)
+      else {
+        const categoryCounts = events.reduce((acc: { [key: string]: number }, record: EventRecord) => {
+          acc[record.category] = (acc[record.category] || 0) + 1
+          return acc
+        }, {})
+        setEventData(Object.keys(categoryCounts).map((category) => ({ category, count: categoryCounts[category] })))
       }
 
       // Fetch Flight Data
-      const { data: flights, error: flightError } = await supabase.from("military_flights").select("status")
-      if (flightError) console.error("Error fetching flight data:", flightError)
-      if (flights) {
-        const statusCounts: { [key: string]: number } = {}
-        flights.forEach((flight) => {
-          statusCounts[flight.status] = (statusCounts[flight.status] || 0) + 1
-        })
-        const formattedFlights = Object.keys(statusCounts).map((status) => ({
-          status,
-          count: statusCounts[status],
-        }))
-        setFlightData(formattedFlights)
+      const { data: flights, error: flightError } = await supabase.from("military_flights").select("*")
+      if (flightError) console.error("Error fetching flights for analytics:", flightError)
+      else {
+        const typeCounts = flights.reduce((acc: { [key: string]: number }, record: FlightRecord) => {
+          acc[record.flight_type] = (acc[record.flight_type] || 0) + 1
+          return acc
+        }, {})
+        setFlightData(Object.keys(typeCounts).map((type) => ({ type, count: typeCounts[type] })))
       }
 
       // Fetch Permanence Data
-      const { data: permanenceRecords, error: permanenceError } = await supabase
-        .from("daily_permanence_records")
-        .select("status")
-      if (permanenceError) console.error("Error fetching permanence data:", permanenceError)
-      if (permanenceRecords) {
-        const statusCounts: { [key: string]: number } = {}
-        permanenceRecords.forEach((record) => {
-          statusCounts[record.status] = (statusCounts[record.status] || 0) + 1
-        })
-        const formattedPermanence = Object.keys(statusCounts).map((status) => ({
-          status,
-          count: statusCounts[status],
-        }))
-        setPermanenceData(formattedPermanence)
+      const { data: permanence, error: permError } = await supabase.from("daily_permanence_records").select("*")
+      if (permError) console.error("Error fetching permanence for analytics:", permError)
+      else {
+        const statusCounts = permanence.reduce((acc: { [key: string]: number }, record: PermanenceRecord) => {
+          acc[record.status] = (acc[record.status] || 0) + 1
+          return acc
+        }, {})
+        setPermanenceData(Object.keys(statusCounts).map((status) => ({ status, count: statusCounts[status] })))
       }
-
-      setLoading(false)
     }
 
     fetchData()
   }, [])
 
-  if (loading) {
-    return (
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <Skeleton className="h-[350px] w-full" />
-        <Skeleton className="h-[350px] w-full" />
-        <Skeleton className="h-[350px] w-full" />
-      </div>
-    )
-  }
+  const attendanceChartConfig = {
+    presente: {
+      label: "Presente",
+      color: "hsl(var(--chart-1))",
+    },
+    ausente: {
+      label: "Ausente",
+      color: "hsl(var(--chart-2))",
+    },
+  } as const
+
+  const justificationChartConfig = {
+    count: {
+      label: "Número de Justificativas",
+      color: "hsl(var(--chart-3))",
+    },
+    status: {
+      label: "Status",
+    },
+  } as const
+
+  const eventChartConfig = {
+    count: {
+      label: "Número de Eventos",
+      color: "hsl(var(--chart-4))",
+    },
+    category: {
+      label: "Categoria",
+    },
+  } as const
+
+  const flightChartConfig = {
+    count: {
+      label: "Número de Voos",
+      color: "hsl(var(--chart-5))",
+    },
+    type: {
+      label: "Tipo de Voo",
+    },
+  } as const
+
+  const permanenceChartConfig = {
+    count: {
+      label: "Número de Registros",
+      color: "hsl(var(--chart-6))",
+    },
+    status: {
+      label: "Status",
+    },
+  } as const
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold">Dashboard de Análises</h2>
-      <Tabs defaultValue="attendance">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto gap-1 p-1">
-          <TabsTrigger value="attendance" className="text-xs sm:text-sm px-2 py-2">
-            Presença
-          </TabsTrigger>
-          <TabsTrigger value="events" className="text-xs sm:text-sm px-2 py-2">
-            Eventos
-          </TabsTrigger>
-          <TabsTrigger value="flights" className="text-xs sm:text-sm px-2 py-2">
-            Voos
-          </TabsTrigger>
-          <TabsTrigger value="permanence" className="text-xs sm:text-sm px-2 py-2">
-            Permanência
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="attendance" className="mt-6 animate-in fade-in duration-300">
-          <Chart
-            data={attendanceData}
-            type="bar"
-            dataKey="date"
-            valueKey="present"
-            title="Presença Diária"
-            description="Número de militares presentes por dia."
-            colors={["#4CAF50", "#F44336"]} // Green for present, Red for absent
-          />
-          <Chart
-            data={attendanceData}
-            type="line"
-            dataKey="date"
-            valueKey="absent"
-            title="Ausências Diárias"
-            description="Número de militares ausentes por dia."
-            colors={["#F44336"]}
-          />
-        </TabsContent>
-        <TabsContent value="events" className="mt-6 animate-in fade-in duration-300">
-          <Chart
-            data={eventData}
-            type="pie"
-            nameKey="category"
-            valueKey="count"
-            title="Eventos por Categoria"
-            description="Distribuição de eventos por tipo."
-          />
-        </TabsContent>
-        <TabsContent value="flights" className="mt-6 animate-in fade-in duration-300">
-          <Chart
-            data={flightData}
-            type="pie"
-            nameKey="status"
-            valueKey="count"
-            title="Status de Voos"
-            description="Distribuição de voos por status."
-          />
-        </TabsContent>
-        <TabsContent value="permanence" className="mt-6 animate-in fade-in duration-300">
-          <Chart
-            data={permanenceData}
-            type="pie"
-            nameKey="status"
-            valueKey="count"
-            title="Status de Permanência"
-            description="Distribuição de registros de permanência por status."
-          />
-        </TabsContent>
-      </Tabs>
+    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <Card>
+        <CardHeader>
+          <CardTitle>Faltas Diárias</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Chart data={attendanceData} config={attendanceChartConfig} type="line" />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Justificativas por Status</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Chart data={justificationData} config={justificationChartConfig} type="pie" />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Eventos por Categoria</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Chart data={eventData} config={eventChartConfig} type="pie" />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Voos por Tipo</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Chart data={flightData} config={flightChartConfig} type="pie" />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Permanência por Status</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Chart data={permanenceData} config={permanenceChartConfig} type="pie" />
+        </CardContent>
+      </Card>
     </div>
   )
 }
