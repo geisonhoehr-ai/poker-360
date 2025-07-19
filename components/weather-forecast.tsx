@@ -75,11 +75,13 @@ export function WeatherForecast() {
   }
 
   return (
-    <Card className="w-full max-w-xs mx-auto p-4 bg-card rounded-lg shadow-md animate-in fade-in slide-in-from-top duration-500">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-lg font-semibold text-center text-primary">Santa Maria, RS</CardTitle>
+    <Card className="w-full max-w-5xl mx-auto">
+      {" "}
+      {/* Ajustado para ser mais largo */}
+      <CardHeader>
+        <CardTitle className="text-center">Mapa do Tempo</CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col items-center justify-center gap-2">
+      <CardContent className="flex items-center justify-center p-0">
         {loading ? (
           <p className="text-muted-foreground">Carregando...</p>
         ) : error ? (
@@ -99,6 +101,15 @@ export function WeatherForecast() {
         ) : (
           <p className="text-muted-foreground">Dados de clima não disponíveis.</p>
         )}
+        {/* Incorporar o mapa do Windy.com */}
+        <iframe
+          width="100%" // Ocupa a largura total do Card
+          height="600" // Altura fixa para o mapa
+          src="https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=mm&metricTemp=%C2%B0C&metricWind=default&zoom=5&overlay=wind&product=ecmwf&level=surface&lat=-33.064&lon=-53.877&detailLat=-29.701&detailLon=-53.874&detail=true&pressure=true&message=true"
+          frameBorder="0"
+          title="Windy.com Weather Map"
+          className="rounded-b-lg" // Borda arredondada na parte inferior
+        ></iframe>
       </CardContent>
     </Card>
   )

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Chart } from "@/components/ui/chart"
 import { supabase } from "@/lib/supabase"
 import { format } from "date-fns"
+import type { PostgrestError } from "@supabase/supabase-js"
 
 interface AttendanceRecord {
   id: string
@@ -49,10 +50,21 @@ export function AnalyticsDashboard() {
 
   useEffect(() => {
     const fetchData = async () => {
-      // Fetch Attendance Data
-      const { data: attendance, error: attError } = await supabase.from("attendance_records").select("*")
-      if (attError) console.error("Error fetching attendance for analytics:", attError)
-      else {
+      // Fetch Attendance Data ────────────────────────────────────────────────
+      let attendance = []
+      let attError: PostgrestError | null = null
+
+      // 1º tentativa: military_attendance_records (nome recomendado)
+      ;({ data: attendance, error: attError } = await supabase.from("military_attendance_records").select("*"))
+
+      // 2º tentativa: attendance_records (nome legado/alternativo)
+      if (attError && attError.code === "42P01") {
+        ;({ data: attendance, error: attError } = await supabase.from("attendance_records").select("*"))
+      }
+
+      if (attError) {
+        console.error("Error fetching attendance for analytics:", attError)
+      } else if (attendance) {
         const dailyAttendance = attendance.reduce(
           (acc: { [key: string]: { presente: number; ausente: number } }, record: AttendanceRecord) => {
             const date = format(new Date(record.date), "yyyy-MM-dd")
@@ -68,7 +80,12 @@ export function AnalyticsDashboard() {
           },
           {},
         )
-        setAttendanceData(Object.keys(dailyAttendance).map((date) => ({ date, ...dailyAttendance[date] })))
+        setAttendanceData(
+          Object.keys(dailyAttendance).map((date) => ({
+            date,
+            ...dailyAttendance[date],
+          })),
+        )
       }
 
       // Fetch Justification Data

@@ -25,28 +25,28 @@ export type AbsenceReason =
 export type Justification = {
   id: string
   militaryId: string
-  reason: string
+  reason: string // e.g., "Férias", "Missão", "Dispensa Laudo, "Curso"
   startDate: Date
   endDate: Date
 }
 
 export type AttendanceRecord = {
-  id: string
+  id: string // Adicionado ID para facilitar a edição/remoção no histórico
   militaryId: string
-  militaryName: string
-  rank: string
+  militaryName: string // Adicionado para facilitar a exibição/exportação
+  rank: string // Adicionado para facilitar a exibição/exportação
   callType: CallType
-  date: string
+  date: string // YYYY-MM-DD
   status: AbsenceReason
 }
 
 export type Event = {
   id: string
   title: string
-  description?: string
+  description?: string // Nova propriedade
   date: Date
-  time?: string
-  createdByMilitaryId?: string
+  time?: string // Optional time, e.g., "14:30"
+  createdByMilitaryId?: string // Novo: Militar que criou o evento
 }
 
 export type NoteItem = {
@@ -62,20 +62,20 @@ export type PermanenceChecklistItem = {
 }
 
 export type DailyPermanenceRecord = {
-  id: string
+  id: string // UUID for the record
   militaryId: string
   militaryName: string
-  date: string
+  date: string // YYYY-MM-DD
   checklist: PermanenceChecklistItem[]
 }
 
 export type FlightRecord = {
   id: string
   date: Date
-  timeZulu: string
-  timeBrasilia: string
-  pilotIds: string[]
-  description?: string
+  timeZulu: string // Horário em Zulu (UTC)
+  timeBrasilia: string // Horário local de Brasília
+  pilotIds: string[] // IDs dos pilotos
+  description?: string // Detalhes do voo
 }
 
 export type Key = {
@@ -89,5 +89,5 @@ export type KeyMovement = {
   keyId: string
   type: "retirada" | "entrega"
   militaryId: string
-  timestamp: string
+  timestamp: string // ISO string
 }

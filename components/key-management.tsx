@@ -61,7 +61,7 @@ export function KeyManagement() {
           roomName: k.room_name,
         })) as Key[],
       )
-      console.log("Chaves carregadas:", data) // Adicionado log para depuração
+      console.log("Chaves carregadas:", data)
     }
     setLoadingKeys(false)
   }, [toast])
