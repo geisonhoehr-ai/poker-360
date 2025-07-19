@@ -1,114 +1,79 @@
 "use client"
 
 import { useEffect } from "react"
-import { supabase } from "@/lib/supabase"
-import { useToast } from "@/hooks/use-toast"
-import { format } from "date-fns"
-import { ptBR } from "date-fns/locale"
+import { supabase } from "@/lib/supabase" // Corrigido: import { supabase }
+import { useToast } from "@/components/ui/use-toast"
 
 export function SupabaseRealtimeListener() {
   const { toast } = useToast()
+  // Removido: const supabase = createClient()
 
   useEffect(() => {
-    // Listener para military_events
-    const eventsChannel = supabase
-      .channel("events_changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "military_events" }, (payload) => {
-        console.log("Mudança em military_events!", payload)
-        if (payload.eventType === "INSERT") {
-          const newEvent = payload.new as any
-          toast({
-            title: "Novo Evento Adicionado!",
-            description: `"${newEvent.title}" em ${format(new Date(newEvent.date), "dd/MM/yyyy", { locale: ptBR })} ${newEvent.time ? `às ${newEvent.time}` : ""}.`,
-            duration: 5000,
-          })
-        } else if (payload.eventType === "UPDATE") {
-          const updatedEvent = payload.new as any
-          toast({
-            title: "Evento Atualizado!",
-            description: `O evento "${updatedEvent.title}" foi atualizado.`,
-            duration: 5000,
-          })
-        } else if (payload.eventType === "DELETE") {
-          const oldEvent = payload.old as any
-          toast({
-            title: "Evento Removido!",
-            description: `O evento "${oldEvent.title}" foi removido.`,
-            variant: "destructive",
-            duration: 5000,
-          })
-        }
-      })
-      .subscribe()
+    const handleRealtimeEvent = (payload: any, tableName: string) => {
+      let message = ""
+      let title = ""
 
-    // Listener para military_flights
-    const flightsChannel = supabase
-      .channel("flights_changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "military_flights" }, (payload) => {
-        console.log("Mudança em military_flights!", payload)
-        if (payload.eventType === "INSERT") {
-          const newFlight = payload.new as any
-          toast({
-            title: "Novo Voo Agendado!",
-            description: `Voo em ${format(new Date(newFlight.date), "dd/MM/yyyy", { locale: ptBR })} às ${newFlight.time_brasilia} (BR).`,
-            duration: 5000,
-          })
-        } else if (payload.eventType === "UPDATE") {
-          const updatedFlight = payload.new as any
-          toast({
-            title: "Voo Atualizado!",
-            description: `Voo em ${format(new Date(updatedFlight.date), "dd/MM/yyyy", { locale: ptBR })} às ${updatedFlight.time_brasilia} (BR) foi atualizado.`,
-            duration: 5000,
-          })
-        } else if (payload.eventType === "DELETE") {
-          const oldFlight = payload.old as any
-          toast({
-            title: "Voo Removido!",
-            description: `Um voo em ${format(new Date(oldFlight.date), "dd/MM/yyyy", { locale: ptBR })} foi removido.`,
-            variant: "destructive",
-            duration: 5000,
-          })
-        }
-      })
-      .subscribe()
+      switch (payload.eventType) {
+        case "INSERT":
+          title = `Novo registro em ${tableName}`
+          message = `Um novo item foi adicionado: ${JSON.stringify(payload.new)}`
+          break
+        case "UPDATE":
+          title = `Registro atualizado em ${tableName}`
+          message = `Um item foi atualizado: ${JSON.stringify(payload.new)}`
+          break
+        case "DELETE":
+          title = `Registro excluído em ${tableName}`
+          message = `Um item foi excluído: ${JSON.stringify(payload.old)}`
+          break
+        default:
+          return
+      }
 
-    // Listener para military_justifications
-    const justificationsChannel = supabase
-      .channel("justifications_changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "military_justifications" }, (payload) => {
-        console.log("Mudança em military_justifications!", payload)
-        if (payload.eventType === "INSERT") {
-          const newJustification = payload.new as any
-          toast({
-            title: "Nova Justificativa Adicionada!",
-            description: `Justificativa para o militar ${newJustification.military_id} (${newJustification.reason}) adicionada.`,
-            duration: 5000,
-          })
-        } else if (payload.eventType === "UPDATE") {
-          const updatedJustification = payload.new as any
-          toast({
-            title: "Justificativa Atualizada!",
-            description: `Justificativa para o militar ${updatedJustification.military_id} (${updatedJustification.reason}) foi atualizada.`,
-            duration: 5000,
-          })
-        } else if (payload.eventType === "DELETE") {
-          const oldJustification = payload.old as any
-          toast({
-            title: "Justificativa Removida!",
-            description: `Justificativa para o militar ${oldJustification.military_id} (${oldJustification.reason}) foi removida.`,
-            variant: "destructive",
-            duration: 5000,
-          })
-        }
+      toast({
+        title: title,
+        description: message,
+        duration: 5000,
       })
-      .subscribe()
+    }
+
+    const channels = [
+      supabase
+        .channel("military_events_changes")
+        .on("postgres_changes", { event: "*", schema: "public", table: "military_events" }, (payload) =>
+          handleRealtimeEvent(payload, "Avisos e Eventos"),
+        )
+        .subscribe(),
+      supabase
+        .channel("military_flights_changes")
+        .on("postgres_changes", { event: "*", schema: "public", table: "military_flights" }, (payload) =>
+          handleRealtimeEvent(payload, "Voo"),
+        )
+        .subscribe(),
+      supabase
+        .channel("military_justifications_changes")
+        .on("postgres_changes", { event: "*", schema: "public", table: "military_justifications" }, (payload) =>
+          handleRealtimeEvent(payload, "Justificativas"),
+        )
+        .subscribe(),
+      supabase
+        .channel("daily_permanence_records_changes")
+        .on("postgres_changes", { event: "*", schema: "public", table: "daily_permanence_records" }, (payload) =>
+          handleRealtimeEvent(payload, "Permanência"),
+        )
+        .subscribe(),
+      supabase
+        .channel("military_personal_notes_changes")
+        .on("postgres_changes", { event: "*", schema: "public", table: "military_personal_notes" }, (payload) =>
+          handleRealtimeEvent(payload, "Minhas Notas"),
+        )
+        .subscribe(),
+    ]
 
     return () => {
-      supabase.removeChannel(eventsChannel)
-      supabase.removeChannel(flightsChannel)
-      supabase.removeChannel(justificationsChannel)
+      channels.forEach((channel) => supabase.removeChannel(channel))
     }
-  }, [toast])
+  }, [toast, supabase])
 
   return null // Este componente não renderiza nada visível
 }

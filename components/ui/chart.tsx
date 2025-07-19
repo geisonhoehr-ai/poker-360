@@ -7,15 +7,31 @@ import {
   Bar,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip,
   Legend,
   ResponsiveContainer,
   PieChart,
   Pie,
   Cell,
+  LineChart,
+  Line,
+  CartesianGrid, // Adicionado para CartesianGrid
 } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+
+// Definindo ChartProps diretamente aqui para evitar dependência circular ou arquivo extra
+interface ChartProps {
+  data: any[]
+  type: "bar" | "pie" | "line"
+  dataKey?: string // Para bar/line chart: a chave para o eixo X
+  valueKey?: string // Para bar/line chart: a chave para o valor da barra/linha
+  nameKey?: string // Para pie chart: a chave para o nome da fatia
+  pieDataKey?: string // Para pie chart: a chave para o valor da fatia
+  pieNameKey?: string // Para pie chart: a chave para o nome da fatia
+  title?: string
+  description?: string
+  colors?: string[] // Optional colors for pie chart cells
+}
 
 import { cn } from "@/lib/utils"
 
@@ -316,87 +332,62 @@ function getPayloadConfigFromPayload(config: ChartConfig, payload: unknown, key:
   return configLabelKey in config ? config[configLabelKey] : config[key as keyof typeof config]
 }
 
-interface ChartProps {
-  data: any[]
-  type: "bar" | "pie"
-  dataKey: string // For bar chart: the key for the bar value
-  nameKey?: string // For bar chart: the key for the X-axis label
-  pieValueKey?: string // For pie chart: the key for the value
-  pieNameKey?: string // For pie chart: the key for the name
-  title: string
-  description?: string
-  colors?: string[] // Optional colors for pie chart cells
-}
+const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#AF19FF", "#FF1919"]
 
-const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8", "#82ca9d", "#ffc658", "#d0ed57"]
-
-export function Chart({
-  data,
-  type,
-  dataKey,
-  nameKey,
-  pieValueKey,
-  pieNameKey,
-  title,
-  description,
-  colors = COLORS,
-}: ChartProps) {
+export function Chart({ data, type, dataKey, nameKey, valueKey, title, description, colors = COLORS }: ChartProps) {
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        {description && <p className="text-sm text-muted-foreground">{description}</p>}
-      </CardHeader>
-      <CardContent className="h-[300px] p-4">
-        <ResponsiveContainer width="100%" height="100%">
-          {type === "bar" && nameKey ? (
-            <BarChart data={data} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis dataKey={nameKey} stroke="hsl(var(--foreground))" />
-              <YAxis stroke="hsl(var(--foreground))" />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "hsl(var(--background))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "0.5rem",
-                }}
-                itemStyle={{ color: "hsl(var(--foreground))" }}
-              />
-              <Legend />
-              <Bar dataKey={dataKey} fill="hsl(var(--primary))" />
-            </BarChart>
-          ) : type === "pie" && pieValueKey && pieNameKey ? (
-            <PieChart>
-              <Pie
-                data={data}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                outerRadius={80}
-                fill="#8884d8"
-                dataKey={pieValueKey}
-                nameKey={pieNameKey}
-              >
-                {data.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
-                ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "hsl(var(--background))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "0.5rem",
-                }}
-                itemStyle={{ color: "hsl(var(--foreground))" }}
-              />
-              <Legend />
-            </PieChart>
-          ) : (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
-              Configuração de gráfico inválida.
-            </div>
-          )}
-        </ResponsiveContainer>
+    <Card>
+      {title && (
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+          {description && <p className="text-sm text-muted-foreground">{description}</p>}
+        </CardHeader>
+      )}
+      <CardContent>
+        <div className="h-[300px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            {type === "bar" && (
+              <BarChart data={data}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" /> {/* Adicionado CartesianGrid */}
+                <XAxis dataKey={dataKey} stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey={valueKey || "value"} fill="#8884d8" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            )}
+            {type === "line" && (
+              <LineChart data={data}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" /> {/* Adicionado CartesianGrid */}
+                <XAxis dataKey={dataKey} stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                <Tooltip />
+                <Legend />
+                <Line type="monotone" dataKey={valueKey || "value"} stroke="#8884d8" activeDot={{ r: 8 }} />
+              </LineChart>
+            )}
+            {type === "pie" && (
+              <PieChart>
+                <Pie
+                  data={data}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey={valueKey || "value"}
+                  nameKey={nameKey || "name"}
+                >
+                  {data.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            )}
+          </ResponsiveContainer>
+        </div>
       </CardContent>
     </Card>
   )

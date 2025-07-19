@@ -10,10 +10,12 @@ import { PersonalNotes } from "@/components/personal-notes"
 import { PermanenceChecklist } from "@/components/permanence-checklist"
 import { FlightScheduler } from "@/components/flight-scheduler"
 import { KeyManagement } from "@/components/key-management"
-import { AppHeader } from "@/components/app-header"
+// Remova a importação do AppHeader daqui se ela existir:
+// import { AppHeader } from "@/components/app-header"
 import { DailyQuotes } from "@/components/daily-quotes"
 import { WeatherForecast } from "@/components/weather-forecast"
-import { AppFooter } from "@/components/app-footer"
+// Remova a importação do AppFooter daqui se ela existir:
+// import { AppFooter } from "@/components/app-footer"
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState("attendance")
@@ -28,10 +30,11 @@ export default function Home() {
       <main className="relative z-10 flex min-h-screen flex-col items-center p-4 md:p-8 lg:p-12">
         <div className="w-full max-w-5xl space-y-8">
           <div className="flex flex-col md:flex-row justify-between items-center w-full gap-4">
-            <AppHeader logoSrc="/images/1_10GPAV.png" />
+            {/* Remova a renderização do AppHeader daqui se ela existir: */}
+            {/* <AppHeader logoSrc="/images/1_10GPAV.png" /> */}
+            <DailyQuotes />
             <WeatherForecast />
           </div>
-          <DailyQuotes />
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 md:grid-cols-8 h-auto gap-1 p-1">
               <TabsTrigger value="attendance" className="text-xs sm:text-sm px-2 py-2">
@@ -86,7 +89,8 @@ export default function Home() {
           </Tabs>
         </div>
       </main>
-      <AppFooter />
+      {/* Remova a renderização do AppFooter daqui se ela existir: */}
+      {/* <AppFooter /> */}
     </div>
   )
 }
